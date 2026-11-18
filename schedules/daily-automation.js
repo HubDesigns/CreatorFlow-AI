@@ -1,4 +1,4 @@
-const cron = require('node-cron');
+﻿const cron = require('node-cron');
 const { Logger } = require('../utils/logger');
 
 class DailyAutomation {
@@ -7,7 +7,7 @@ class DailyAutomation {
     this.db = database;
     this.logger = new Logger('DailyAutomation');
     this.scheduledTasks = new Map();
-    this.isEnabled = true;
+    this.isEnabled = false;
     this.healthCheckInterval = null;
     this.lastHealthCheck = null;
     this.generateContent = options.generateContent || null;
@@ -160,7 +160,7 @@ class DailyAutomation {
       if (scheduleEntry) {
         this.logger.info('Content scheduled for publishing');
       } else {
-        this.logger.warn('Content was NOT scheduled — production produced placeholder assets. See warnings above.');
+        this.logger.warn('Content was NOT scheduled â€” production produced placeholder assets. See warnings above.');
       }
 
       timer.end();
@@ -676,3 +676,5 @@ class DailyAutomation {
 }
 
 module.exports = { DailyAutomation };
+
+
