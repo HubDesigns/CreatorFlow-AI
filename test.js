@@ -2522,6 +2522,27 @@ class SystemTest {
       throw new Error('publishContent removed the wrong publish queue entries');
     }
 
+    const futureScheduled = new PublishingSchedulingAgent({
+      updateScheduleEntry: async () => {}
+    }, {});
+    const futureEntry = {
+      id: 'schedule-future',
+      productionId: 'prod-future',
+      title: 'Future scheduled video',
+      status: 'scheduled',
+      publishTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+      metadata: { audio: intentionalAudio }
+    };
+    futureScheduled.publishQueue = [futureEntry];
+    futureScheduled.uploadToYouTube = async () => ({ id: 'youtube-future' });
+    const futureResult = await futureScheduled.publishContent('prod-future');
+    if (futureResult.status !== 'uploaded' || futureResult.publishedAt !== null) {
+      throw new Error('A future YouTube upload was incorrectly marked as already published');
+    }
+    if (futureScheduled.publishQueue.length !== 0) {
+      throw new Error('A future video accepted by YouTube remained in the local upload queue');
+    }
+
     const missingNarration = new PublishingSchedulingAgent({ updateScheduleEntry: async () => {} }, {});
     missingNarration.publishQueue = [{ productionId: 'prod-no-audio', status: 'scheduled', metadata: {} }];
     missingNarration.uploadToYouTube = async () => { throw new Error('Upload must not start without narration'); };
