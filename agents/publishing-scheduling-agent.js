@@ -176,19 +176,27 @@ class PublishingSchedulingAgent {
         throw error;
       }
       
-      // Update database
-      scheduleEntry.status = 'published';
-      scheduleEntry.publishedAt = new Date().toISOString();
+      // A future publishAt upload is accepted by YouTube as a private scheduled video.
+      // It is not public yet, so keep the database state distinct from "published".
       scheduleEntry.youtubeId = uploadResult.id;
       scheduleEntry.youtubeUrl = `https://www.youtube.com/watch?v=${uploadResult.id}`;
-      
+      const publishTime = new Date(scheduleEntry.publishTime);
+      const scheduledOnYouTube = Number.isFinite(publishTime.getTime()) &&
+        publishTime.getTime() > Date.now() + 60000;
+      scheduleEntry.status = scheduledOnYouTube ? 'uploaded' : 'published';
+      scheduleEntry.publishedAt = scheduledOnYouTube ? null : new Date().toISOString();
+
       await this.db.updateScheduleEntry(scheduleEntry);
-      await this.syncShortStatus(scheduleEntry, 'published');
-      
-      // Remove from queue
+      await this.syncShortStatus(scheduleEntry, scheduleEntry.status);
+
+      // YouTube owns the future publication once it has accepted publishAt.
       this.publishQueue = this.publishQueue.filter(entry => entry.productionId !== scheduleEntry.productionId);
-      
-      this.logger.success(`Content published: ${scheduleEntry.youtubeUrl}`);
+
+      if (scheduledOnYouTube) {
+        this.logger.success(`Video uploaded privately and scheduled on YouTube: ${scheduleEntry.youtubeUrl}`);
+      } else {
+        this.logger.success(`Content published: ${scheduleEntry.youtubeUrl}`);
+      }
       return scheduleEntry;
     } catch (error) {
       this.logger.error('Failed to publish content:', error);
@@ -277,7 +285,8 @@ class PublishingSchedulingAgent {
 
   async reconcileUploadedVideo(scheduleEntry) {
     const response = await this.youtube.videos.list({ part: 'id,status', id: scheduleEntry.youtubeId });
-    if (!response.data.items?.some(video => video.id === scheduleEntry.youtubeId)) {
+    const verifiedVideo = response.data.items?.find(video => video.id === scheduleEntry.youtubeId);
+    if (!verifiedVideo) {
       scheduleEntry.status = 'reconciliation_required';
       scheduleEntry.error = 'The recorded YouTube video ID could not be verified';
       await this.db.updateScheduleEntry(scheduleEntry);
@@ -287,14 +296,19 @@ class PublishingSchedulingAgent {
       error.code = 'UPLOAD_OUTCOME_UNKNOWN';
       throw error;
     }
-    scheduleEntry.status = 'published';
-    scheduleEntry.publishedAt = scheduleEntry.publishedAt || new Date().toISOString();
+    const publishAt = verifiedVideo.status?.publishAt ? new Date(verifiedVideo.status.publishAt) : null;
+    const stillScheduled = verifiedVideo.status?.privacyStatus === 'private' &&
+      publishAt && Number.isFinite(publishAt.getTime()) && publishAt.getTime() > Date.now();
+    scheduleEntry.status = stillScheduled ? 'uploaded' : 'published';
+    scheduleEntry.publishedAt = stillScheduled ? null : (scheduleEntry.publishedAt || new Date().toISOString());
     scheduleEntry.youtubeUrl = scheduleEntry.youtubeUrl || `https://www.youtube.com/watch?v=${scheduleEntry.youtubeId}`;
     scheduleEntry.error = null;
     await this.db.updateScheduleEntry(scheduleEntry);
-    await this.syncShortStatus(scheduleEntry, 'published');
+    await this.syncShortStatus(scheduleEntry, scheduleEntry.status);
     this.publishQueue = this.publishQueue.filter(entry => entry.productionId !== scheduleEntry.productionId);
-    this.logger.success(`Reconciled existing YouTube upload: ${scheduleEntry.youtubeUrl}`);
+    this.logger.success(stillScheduled
+      ? `Reconciled private YouTube scheduled upload: ${scheduleEntry.youtubeUrl}`
+      : `Reconciled published YouTube video: ${scheduleEntry.youtubeUrl}`);
     return scheduleEntry;
   }
 
@@ -420,7 +434,10 @@ class PublishingSchedulingAgent {
     const scheduled = this.publishQueue
       .filter(entry => entry.status === 'scheduled')
       .sort((a, b) => new Date(a.publishTime) - new Date(b.publishTime));
-    const readyToPublish = scheduled.filter(entry => new Date(entry.publishTime) <= now);
+    const uploadLeadMinutes = Math.max(5, Math.min(240, Number(process.env.YOUTUBE_UPLOAD_LEAD_MINUTES || 60)));
+    const uploadCutoff = new Date(now.getTime() + uploadLeadMinutes * 60 * 1000);
+    // Upload upcoming videos early so YouTube can hold them privately until publishAt.
+    const readyToPublish = scheduled.filter(entry => new Date(entry.publishTime) <= uploadCutoff);
 
     if (readyToPublish.length === 0) {
       if (scheduled.length > 0) {
