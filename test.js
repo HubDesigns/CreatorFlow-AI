@@ -1042,7 +1042,7 @@ class SystemTest {
     const { MediaGenerationService } = require('./utils/media-generation-service');
     const {
       VideoProvider, VideoProviderRegistry, SeedanceProvider, MiniMaxH3Provider,
-      GoogleOmniProvider, KlingProvider, WanProvider
+      GoogleOmniProvider, KlingProvider, WanProvider, LocalLTXProvider
     } = require('./utils/video-providers');
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'yaa-media-provider-'));
     const db = new Database();
@@ -1099,7 +1099,7 @@ class SystemTest {
       const providers = registry.list();
       const { getVideoProviderReadiness } = require('./utils/video-providers');
       const readiness = getVideoProviderReadiness(registry);
-      if (!readiness.ready || readiness.configuredCount !== 1 || readiness.providerCount !== 5) {
+      if (!readiness.ready || readiness.configuredCount !== 1 || readiness.providerCount !== 6) {
         throw new Error('Readiness must report configured AI providers and exclude slideshow');
       }
       if (!readiness.providers.find(provider => provider.id === 'seedance')?.credentialsConfigured) {
@@ -1112,7 +1112,7 @@ class SystemTest {
       if (!emptyReadiness.providers.find(provider => provider.id === 'kling')?.setupHint.includes('KLING_SECRET_KEY')) {
         throw new Error('Provider setup guidance is missing the required Kling secret key');
       }
-      for (const id of ['seedance', 'minimax_h3', 'google_omni', 'kling', 'wan', 'slideshow']) {
+      for (const id of ['local_ltx', 'seedance', 'minimax_h3', 'google_omni', 'kling', 'wan', 'slideshow']) {
         if (!providers.find(provider => provider.id === id)) throw new Error(`Missing video provider: ${id}`);
       }
       const shortOnly = new VideoProvider('wan', { model: 'wan-test', capabilities: { minDuration: 2, maxDuration: 15, firstFrame: true } });
@@ -1179,6 +1179,49 @@ class SystemTest {
       const listedJob = (await db.listGenerationJobs(10)).find(item => item.id === job.id);
       if (listedJob?.mediaTasks?.length !== 1 || listedJob.mediaTasks[0].external_task_id !== 'prediction-1') {
         throw new Error('Generation job history did not expose its durable provider task');
+      }
+
+
+      const localHome = path.join(directory, 'ltx-runtime');
+      const localBase = path.join(directory, 'ltx-base');
+      const localUnet = path.join(directory, 'ltx-unet');
+      await fs.mkdir(localHome, { recursive: true });
+      await fs.mkdir(path.join(localBase, 'text_encoder'), { recursive: true });
+      await fs.mkdir(path.join(localBase, 'vae'), { recursive: true });
+      await fs.mkdir(path.join(localBase, 'scheduler'), { recursive: true });
+      await fs.mkdir(localUnet, { recursive: true });
+      await fs.writeFile(path.join(localHome, 'inference.py'), '# test fixture');
+      const { EventEmitter } = require('events');
+      let localArgs;
+      const localSpawn = (_command, args) => {
+        localArgs = args;
+        const child = new EventEmitter();
+        child.stdout = new EventEmitter();
+        child.stderr = new EventEmitter();
+        child.kill = () => {};
+        const outputDir = args[args.indexOf('--output_path') + 1];
+        setImmediate(async () => {
+          await fs.copyFile(source, path.join(outputDir, 'local-ltx-test.mp4'));
+          child.emit('close', 0);
+        });
+        return child;
+      };
+      const localProvider = new LocalLTXProvider({}, {
+        home: localHome, checkpointDir: localBase, unetPath: localUnet, spawn: localSpawn
+      });
+      if (!localProvider.isAvailable()) throw new Error('Local LTX readiness did not detect the installed runtime fixture');
+      const localTask = await localProvider.createTask({
+        prompt: 'A cinematic test scene', duration: 5,
+        outputPath: path.join(directory, 'local-ltx-output.mp4')
+      });
+      const localOutput = path.join(directory, 'local-ltx-output.mp4');
+      await localProvider.downloadResult(localTask, localOutput);
+      if (
+        !localArgs.includes('--low_vram') ||
+        localArgs[localArgs.indexOf('--num_frames') + 1] !== '121' ||
+        !(await fs.readFile(localOutput)).equals(await fs.readFile(source))
+      ) {
+        throw new Error('Local LTX did not use its low-VRAM profile or copy the generated MP4');
       }
 
       let seedanceSubmission;
