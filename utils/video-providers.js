@@ -462,6 +462,35 @@ module.exports = {
   GoogleOmniProvider,
   KlingProvider,
   WanProvider,
+
+const PROVIDER_SETUP_HINTS = {
+  seedance: 'Add a Replicate API token (REPLICATE_API_TOKEN) or save it under Settings credentials → replicate.apiKey.',
+  minimax_h3: 'Add a MiniMax API key (MINIMAX_API_KEY) or save it under Settings credentials → minimax.apiKey.',
+  google_omni: 'Add a Gemini API key (GEMINI_API_KEY) or save it under Settings credentials → gemini.apiKey.',
+  kling: 'Add both KLING_ACCESS_KEY and KLING_SECRET_KEY, or save both under Settings credentials → kling.',
+  wan: 'Add a DashScope API key (DASHSCOPE_API_KEY) or save it under Settings credentials → wan.apiKey.'
+};
+
+function getVideoProviderReadiness(registry) {
+  const providers = (registry?.list?.() || [])
+    .filter(provider => provider.id !== 'slideshow')
+    .map(provider => ({
+      id: provider.id,
+      model: provider.model || null,
+      credentialsConfigured: provider.available === true,
+      setupHint: PROVIDER_SETUP_HINTS[provider.id] || 'Configure this provider in Settings.'
+    }));
+  const configuredCount = providers.filter(provider => provider.credentialsConfigured).length;
+  return {
+    ready: configuredCount > 0,
+    configuredCount,
+    providerCount: providers.length,
+    providers,
+    note: 'Credential presence only; provider billing, quota, account access, and live API availability are not verified.'
+  };
+}
+
   SlideshowProvider,
-  safeModelError
+  safeModelError,
+  getVideoProviderReadiness
 };
