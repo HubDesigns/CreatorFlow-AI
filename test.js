@@ -1250,7 +1250,7 @@ class SystemTest {
       });
 
       const localReadiness = getVideoProviderReadiness(new VideoProviderRegistry({}, { providers: { local_ltx: localProvider } }));
-      if (!localReadiness.ready || !localReadiness.localReady || localReadiness.configuredCount !== 1) {
+      if (!localReadiness.ready || !localReadiness.localReady || localReadiness.configuredCount !== 1 || !localReadiness.providers.find(provider => provider.id === 'local_ltx')?.installed) {
         throw new Error('An installed local LTX provider should mark free video readiness as ready');
       }
 
