@@ -678,7 +678,7 @@ class Database {
       ['channel_timezone', 'America/Chicago', 'Timezone used to present channel schedules'],
       ['max_daily_posts', '1', 'Maximum posts per day'],
       ['content_buffer_days', '3', 'Days of content to keep in buffer'],
-      ['video_provider', 'slideshow', 'Video provider: slideshow, auto, seedance, minimax_h3, google_omni, kling, or wan'],
+      ['video_provider', 'auto', 'Video provider: auto, slideshow, seedance, minimax_h3, google_omni, kling, or wan'],
       ['video_provider_order', 'seedance,minimax_h3,google_omni,kling,wan,slideshow', 'Provider priority used by automatic routing'],
       ['video_generation_mode', 'hybrid', 'Use provider clips within a locally assembled long-form video'],
       ['video_clip_duration', '8', 'Requested duration for each generated provider clip'],
@@ -692,6 +692,22 @@ class Database {
         'INSERT OR IGNORE INTO settings (key, value, description) VALUES (?, ?, ?)',
         [key, value, description]
       );
+    }
+
+    // One-time migration: the previous default was slideshow. Move existing
+    // installations to automatic AI-video routing without overriding a later
+    // explicit provider choice on subsequent launches.
+    const videoPipelineVersion = await this.getSetting('video_pipeline_mode_v2');
+    if (!videoPipelineVersion) {
+      const configuredVideoProvider = await this.getSetting('video_provider');
+      if (configuredVideoProvider === 'slideshow') {
+        await this.setSetting(
+          'video_provider',
+          'auto',
+          'Automatically select an available AI video provider; slideshow must be selected explicitly'
+        );
+      }
+      await this.setSetting('video_pipeline_mode_v2', '1', 'AI video pipeline default migration');
     }
 
     await this.executeQuery(
