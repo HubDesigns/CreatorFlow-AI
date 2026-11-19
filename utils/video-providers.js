@@ -621,11 +621,12 @@ function getVideoProviderReadiness(registry) {
     .map(provider => ({
       id: provider.id,
       model: provider.model || null,
-      credentialsConfigured: provider.available === true,
+      credentialsConfigured: provider.id === 'local_ltx' ? false : provider.available === true,
+      installed: provider.id === 'local_ltx' ? provider.available === true : undefined,
       setupHint: PROVIDER_SETUP_HINTS[provider.id] || 'Configure this provider in Settings.'
     }));
-  const configuredCount = providers.filter(provider => provider.credentialsConfigured).length;
-  const localReady = providers.some(provider => provider.id === 'local_ltx' && provider.credentialsConfigured);
+  const configuredCount = providers.filter(provider => provider.credentialsConfigured || provider.installed).length;
+  const localReady = providers.some(provider => provider.id === 'local_ltx' && provider.installed === true);
   const paidCloudConfiguredCount = providers.filter(provider => provider.id !== 'local_ltx' && provider.credentialsConfigured).length;
   const paidCloudAllowed = registry?.allowCloudProviders === true;
   return {
