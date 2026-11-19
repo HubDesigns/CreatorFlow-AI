@@ -581,6 +581,11 @@ class VideoProviderRegistry {
 
   select(requested = 'auto', order = DEFAULT_PROVIDER_ORDER, request = {}) {
     if (requested && requested !== 'auto') {
+      if (requested !== 'local_ltx' && requested !== 'slideshow' && !this.allowCloudProviders) {
+        const error = new Error('Paid cloud video providers are disabled. Select local_ltx, or explicitly enable VIDEO_ALLOW_PAID_PROVIDERS=true to use cloud generation.');
+        error.code = 'PAID_VIDEO_PROVIDER_DISABLED';
+        throw error;
+      }
       const provider = this.get(requested);
       if (provider?.isAvailable()) return provider;
       const error = new Error(`The selected video provider "${requested}" is not configured or available. Configure its credentials in Settings, or select Auto to use another available video provider.`);
