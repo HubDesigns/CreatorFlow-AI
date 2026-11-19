@@ -18,7 +18,7 @@ class MediaGenerationService {
 
   async settings() {
     const stored = this.db?.getAllSettings ? await this.db.getAllSettings() : {};
-    const provider = process.env.VIDEO_PROVIDER || stored.video_provider || 'slideshow';
+    const provider = process.env.VIDEO_PROVIDER || stored.video_provider || 'auto';
     const order = String(process.env.VIDEO_PROVIDER_ORDER || stored.video_provider_order || DEFAULT_PROVIDER_ORDER.join(','))
       .split(',').map(value => value.trim()).filter(Boolean);
     return {
@@ -74,15 +74,25 @@ class MediaGenerationService {
       firstFrame: visualAssets[0] || null,
       generateAudio: settings.generateAudio
     };
-    const provider = this.registry.select(settings.provider, settings.order, routingRequest);
-    const providerInfo = provider.describe();
-    if (provider.id === 'slideshow' || settings.mode === 'slideshow' || settings.maxGeneratedSeconds === 0) {
+    if (settings.mode === 'slideshow' || settings.provider === 'slideshow') {
       return { clips: [], requestedProvider: settings.provider, actualProvider: 'slideshow', model: 'local-ffmpeg', settings };
     }
+    if (settings.maxGeneratedSeconds === 0) {
+      const error = new Error('AI video generation is disabled because VIDEO_MAX_GENERATED_SECONDS is 0. Set a positive clip budget or explicitly choose slideshow mode.');
+      error.code = 'VIDEO_GENERATION_DISABLED';
+      throw error;
+    }
 
+    const provider = this.registry.select(settings.provider, settings.order, routingRequest);
+    const providerInfo = provider.describe();
     const normalized = provider.normalizeRequest(routingRequest);
     const effectiveSettings = { ...settings, clipDuration: normalized.duration };
     const scenes = this.buildScenePlan(script, visualAssets, effectiveSettings);
+    if (!scenes.length) {
+      const error = new Error('No video scenes were produced from the script. Add a hook, content sections, or a conclusion before generating footage.');
+      error.code = 'VIDEO_SCENE_PLAN_EMPTY';
+      throw error;
+    }
     const clips = [];
     for (const scene of scenes) {
       const outputPath = path.join(outputDir, `${productionId}_${provider.id}_${String(scene.index).padStart(2, '0')}.mp4`);
