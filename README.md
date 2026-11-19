@@ -23,7 +23,7 @@ It researches topics, writes scripts, generates narration and visuals, assembles
 - **Real output only.** Simulated or placeholder media is clearly marked and can never be approved or uploaded.
 - **Self-hosted.** Your keys, media, and channel data stay on your machine.
 - **Learns from evidence, with your sign-off.** Lessons from analytics, retention curves, and comments shape future videos only after you approve them.
-- **Your choice of providers.** Eight text providers or OpenRouter, five AI video providers, plus an explicit local slideshow mode.
+- **Your choice of providers.** Eight text providers or OpenRouter, five cloud AI video providers, a free local LTX-Video Q8 option, and an explicit local slideshow mode.
 
 ## Quick start
 
@@ -125,6 +125,7 @@ Details are in the [feature guide](docs/features.md#automation-schedule).
 
 - [Feature guide](docs/features.md): a walkthrough of every studio and gate.
 - [AI providers](docs/providers.md): text, narration, image, and video providers with keys and limits.
+- [Free local LTX video](docs/local-ltx-video.md): Windows setup for local 8 GB GPU video generation without a cloud video subscription.
 - [API reference](docs/api.md): every HTTP route the dashboard server exposes, for example `POST /generate` with `x-api-key`.
 - [Troubleshooting](docs/troubleshooting.md): fixes for setup, sign-in, and generation problems.
 - [Changelog](CHANGELOG.md) and [releases](https://github.com/darkzOGx/youtube-automation-agent/releases).
