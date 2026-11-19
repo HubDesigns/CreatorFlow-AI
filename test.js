@@ -34,6 +34,7 @@ class SystemTest {
       { name: 'Durable Multi-Provider Video Generation', test: () => this.testVideoProviderLayer() },
       { name: 'Scene Repair Studio', test: () => this.testSceneRepairStudio() },
       { name: 'Narration Reliability and Recovery', test: () => this.testNarrationReliability() },
+      { name: 'Scene Rebuild with Real FFmpeg', test: () => this.testSceneRebuildRealFFmpeg() },
       { name: 'Shorts Repurposing Studio', test: () => this.testShortsRepurposingStudio() },
       { name: 'Research and Provenance Desk', test: () => this.testProvenanceDesk() },
       { name: 'DarkzSEO Discoverability Preflight', test: () => this.testDiscoverabilityPreflight() },
@@ -1360,6 +1361,100 @@ class SystemTest {
       await fs.rm(directory, { recursive: true, force: true });
     }
     this.logger.info('Scene Repair Studio test completed successfully');
+  }
+
+  async testSceneRebuildRealFFmpeg() {
+    // Regression: rebuild() wrote the scene narration mix into <dataRoot>/audio without creating
+    // that folder, so FFmpeg exited 254 and the route answered HTTP 400 on a fresh data root.
+    // Unlike the other scene tests this one uses the real generator and real FFmpeg (no stubs).
+    const fs = require('fs').promises;
+    const os = require('os');
+    const sharp = require('sharp');
+    const { SceneRepairService } = require('./utils/scene-repair-service');
+    const { AIVideoGenerator } = require('./utils/ai-video-generator');
+    const { runFFmpeg, getMediaDuration, checkFFmpeg } = require('./utils/ffmpeg');
+    if (!await checkFFmpeg()) {
+      this.logger.warn('FFmpeg is not available; skipping the real-FFmpeg scene rebuild test');
+      return;
+    }
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'yaa-real-rebuild-'));
+    const db = new Database();
+    db.dbPath = path.join(directory, 'real-rebuild.db');
+    await db.initialize();
+
+    try {
+      const productionId = 'prod_real_rebuild';
+      const sceneInputs = [];
+      for (let index = 0; index < 2; index++) {
+        const imagePath = path.join(directory, `scene${index}.png`);
+        const audioPath = path.join(directory, `scene${index}.m4a`);
+        await sharp({ create: { width: 640, height: 360, channels: 3, background: index ? '#5f2040' : '#203a5f' } }).png().toFile(imagePath);
+        // A locally generated tone fixture: proves the mux path, it is not synthesized speech.
+        await runFFmpeg(['-y', '-f', 'lavfi', '-i', `sine=frequency=${220 + index * 110}:duration=2`, '-c:a', 'aac', audioPath]);
+        sceneInputs.push({ imagePath, audioPath });
+      }
+      const oldVideoPath = path.join(directory, 'old.mp4');
+      await fs.writeFile(oldVideoPath, Buffer.from('previous final video'));
+      const production = {
+        id: productionId, status: 'ready',
+        script: { title: 'TEST real rebuild', fullScript: 'A clearly identified test production used to verify the real FFmpeg scene rebuild. '.repeat(3) },
+        seo: { title: 'TEST real rebuild', description: 'A test production used only to verify the real FFmpeg scene rebuild path.', tags: ['test'] },
+        strategy: { topic: 'TEST real rebuild' },
+        assets: {
+          audio: { path: sceneInputs[0].audioPath, status: 'ready', simulated: false, provider: 'fixture-tone' },
+          thumbnail: { path: sceneInputs[0].imagePath },
+          finalVideo: { path: oldVideoPath, simulated: true, duration: '0:04' }
+        },
+        timeline: {}, priority: 50, scheduledPublishTime: new Date(Date.now() + 86400000).toISOString()
+      };
+      await db.saveProductionData(production);
+      await db.saveProductionSnapshot(production);
+      await db.saveContentReview(productionId, { status: 'needs_review', editorData: {}, qualityChecks: [] });
+      await db.saveContentProvenance(productionId, {
+        sources: [], claims: [], containsSyntheticMedia: false, status: 'not_required',
+        summary: { sourceCount: 0, verifiedSources: 0, claimCount: 0, resolvedClaims: 0, highRiskClaims: 0, unresolvedClaims: 0 }
+      });
+      await db.replaceProductionScenes(productionId, sceneInputs.map((input, index) => ({
+        id: `scene-real-${index + 1}`, label: index ? 'Outro' : 'Hook', scriptText: `Real rebuild scene ${index + 1}.`,
+        prompt: 'Test visual', duration: 2, assetType: 'image', assetOrigin: 'generated', assetPath: input.imagePath,
+        status: index ? 'ready' : 'needs_rebuild', rightsConfirmed: true
+      })));
+      for (const [index, input] of sceneInputs.entries()) {
+        await db.updateProductionScene(productionId, `scene-real-${index + 1}`, {
+          audioPath: input.audioPath, narrationStatus: 'current', narrationProvider: 'fixture-tone', narrationModel: 'sine'
+        });
+      }
+
+      const generator = new AIVideoGenerator({}, { db });
+      const service = new SceneRepairService(db, generator, { dataRoot: directory, logger: this.logger });
+      const rebuilt = await service.rebuild(productionId);
+
+      const stats = await fs.stat(rebuilt.finalVideo);
+      if (!stats.size) throw new Error('Real scene rebuild produced an empty video file');
+      let decodeOutput = '';
+      try {
+        const { stderr } = await runFFmpeg(['-v', 'error', '-i', rebuilt.finalVideo, '-f', 'null', '-']);
+        decodeOutput = String(stderr || '').trim();
+      } catch (error) {
+        throw new Error(`Rebuilt video is not decodable: ${String(error.stderr || error.message).slice(0, 200)}`);
+      }
+      if (decodeOutput) throw new Error(`Rebuilt video decoded with errors: ${decodeOutput.slice(0, 200)}`);
+      let streamInfo = '';
+      await runFFmpeg(['-i', rebuilt.finalVideo]).catch(error => { streamInfo = String(error.stderr || ''); });
+      if (!/Video: h264/.test(streamInfo) || !/Audio: aac/.test(streamInfo)) {
+        throw new Error('Rebuilt video is missing its H.264 video stream or AAC audio stream');
+      }
+      const duration = await getMediaDuration(rebuilt.finalVideo);
+      if (Math.abs(duration - 4) > 0.5) throw new Error(`Rebuilt video duration ${duration}s does not match the 4s scene timeline`);
+      const bundle = await db.getProductionBundle(productionId);
+      if (bundle.assets.finalVideo.simulated !== false || bundle.scenes.some(scene => scene.status !== 'ready')) {
+        throw new Error('Real rebuild did not record a non-simulated final video with every scene ready');
+      }
+    } finally {
+      await db.close();
+      await fs.rm(directory, { recursive: true, force: true });
+    }
+    this.logger.info('Scene rebuild with real FFmpeg test completed successfully');
   }
 
   async testNarrationReliability() {

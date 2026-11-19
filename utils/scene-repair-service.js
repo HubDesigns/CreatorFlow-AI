@@ -557,6 +557,8 @@ class SceneRepairService {
     const captionsPath = path.join(this.dataRoot, 'captions', `${productionId}_repair_${timestamp}.srt`);
     await fs.mkdir(path.dirname(finalPath), { recursive: true });
     await fs.mkdir(path.dirname(captionsPath), { recursive: true });
+    // rebuildNarration writes the scene mix here; FFmpeg will not create a missing output folder.
+    await fs.mkdir(path.join(this.dataRoot, 'audio'), { recursive: true });
     await this.videoGenerator.renderMediaTimeline(scenes.map(scene => ({
       type: scene.assetType, path: scene.assetPath, duration: scene.duration
     })), visualPath);
