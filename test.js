@@ -2350,6 +2350,46 @@ class SystemTest {
       throw new Error('Initial scene generation mixed hardcoded ethereal cues with the configured visual style');
     }
 
+    const failedVisualAgent = Object.create(ProductionManagementAgent.prototype);
+    failedVisualAgent.db = { getChannelProfile: async () => ({ visual_style: 'cinematic' }) };
+    failedVisualAgent.logger = this.logger;
+    failedVisualAgent.aiVideoGenerator = {
+      generateVisualAssets: async () => { throw new Error('image provider unavailable'); }
+    };
+    let placeholderVisualsBlocked = false;
+    try {
+      await failedVisualAgent.generateVideoContent({
+        script: { title: 'Must not become a placeholder', mainContent: { sections: [] } },
+        assets: {}, timeline: {}
+      });
+    } catch (error) {
+      placeholderVisualsBlocked = /image provider unavailable/.test(error.message);
+    }
+    if (!placeholderVisualsBlocked) {
+      throw new Error('Failed real-image generation was converted into placeholder slide elements');
+    }
+
+    const failedAssemblyAgent = Object.create(ProductionManagementAgent.prototype);
+    failedAssemblyAgent.logger = this.logger;
+    failedAssemblyAgent.aiVideoGenerator = {
+      isUsableAudioFile: async () => true,
+      generateVideo: async () => { throw new Error('moving video provider unavailable'); },
+      lastVideoResult: null
+    };
+    let simulatedAssemblyBlocked = false;
+    try {
+      await failedAssemblyAgent.assembleVideo({
+        id: 'must-not-simulate', jobId: 'job-fail-closed', script: { title: 'Fail closed' },
+        assets: { video: { visualAssets: [] }, audio: { path: 'narration.mp3' } },
+        estimatedDuration: '0:30'
+      });
+    } catch (error) {
+      simulatedAssemblyBlocked = /moving video provider unavailable/.test(error.message);
+    }
+    if (!simulatedAssemblyBlocked) {
+      throw new Error('Failed video rendering was converted into a simulated final production');
+    }
+
     const pipeline = new YouTubeAutomationAgent();
     pipeline.db = {
       getChannelProfile: async () => ({}),
