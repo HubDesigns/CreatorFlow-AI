@@ -1100,8 +1100,8 @@ class SystemTest {
       const providers = registry.list();
       const { getVideoProviderReadiness } = require('./utils/video-providers');
       const readiness = getVideoProviderReadiness(registry);
-      if (!readiness.ready || readiness.configuredCount !== 1 || readiness.providerCount !== 6) {
-        throw new Error('Readiness must report configured AI providers and exclude slideshow');
+      if (readiness.ready || readiness.localReady || readiness.paidCloudAllowed || readiness.configuredCount !== 1 || readiness.paidCloudConfiguredCount !== 1 || readiness.providerCount !== 6) {
+        throw new Error('Cloud credentials alone must not mark the free local video setup as ready');
       }
       if (!readiness.providers.find(provider => provider.id === 'seedance')?.credentialsConfigured) {
         throw new Error('Configured provider status was not reported');
@@ -1248,6 +1248,12 @@ class SystemTest {
         prompt: 'A cinematic test scene', duration: 5,
         outputPath: path.join(directory, 'local-ltx-output.mp4')
       });
+
+      const localReadiness = getVideoProviderReadiness(new VideoProviderRegistry({}, { providers: { local_ltx: localProvider } }));
+      if (!localReadiness.ready || !localReadiness.localReady || localReadiness.configuredCount !== 1) {
+        throw new Error('An installed local LTX provider should mark free video readiness as ready');
+      }
+
       const localOutput = path.join(directory, 'local-ltx-output.mp4');
       await localProvider.downloadResult(localTask, localOutput);
       if (
