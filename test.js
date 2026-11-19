@@ -1117,6 +1117,17 @@ class SystemTest {
         if (!providers.find(provider => provider.id === id)) throw new Error(`Missing video provider: ${id}`);
       }
 
+
+      let automaticPaidFallbackBlocked = false;
+      try {
+        new VideoProviderRegistry({}, { providers: { seedance: fake } }).select('auto', ['seedance'], { duration: 4 });
+      } catch (error) {
+        automaticPaidFallbackBlocked = error.code === 'VIDEO_PROVIDER_UNAVAILABLE';
+      }
+      if (!automaticPaidFallbackBlocked) {
+        throw new Error('Automatic routing must not use a paid cloud provider without explicit opt-in');
+      }
+
       let localProviderUnavailableBlocked = false;
       try {
         new VideoProviderRegistry({}).select('local_ltx');
@@ -1129,7 +1140,7 @@ class SystemTest {
 
       const shortOnly = new VideoProvider('wan', { model: 'wan-test', capabilities: { minDuration: 2, maxDuration: 15, firstFrame: true } });
       shortOnly.isAvailable = () => true;
-      const routed = new VideoProviderRegistry({}, { providers: { seedance: fake, wan: shortOnly } });
+      const routed = new VideoProviderRegistry({}, { providers: { seedance: fake, wan: shortOnly }, allowCloudProviders: true });
       if (routed.select('auto', ['wan', 'seedance'], { duration: 20 }).id !== 'seedance') {
         throw new Error('Automatic video routing ignored the requested duration capability');
       }
