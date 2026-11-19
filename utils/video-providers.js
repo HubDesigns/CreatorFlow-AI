@@ -453,16 +453,6 @@ class VideoProviderRegistry {
   }
 }
 
-module.exports = {
-  DEFAULT_PROVIDER_ORDER,
-  VideoProvider,
-  VideoProviderRegistry,
-  SeedanceProvider,
-  MiniMaxH3Provider,
-  GoogleOmniProvider,
-  KlingProvider,
-  WanProvider,
-
 const PROVIDER_SETUP_HINTS = {
   seedance: 'Add a Replicate API token (REPLICATE_API_TOKEN) or save it under Settings credentials → replicate.apiKey.',
   minimax_h3: 'Add a MiniMax API key (MINIMAX_API_KEY) or save it under Settings credentials → minimax.apiKey.',
@@ -489,6 +479,18 @@ function getVideoProviderReadiness(registry) {
     note: 'Credential presence only; provider billing, quota, account access, and live API availability are not verified.'
   };
 }
+
+
+module.exports = {
+  DEFAULT_PROVIDER_ORDER,
+  VideoProvider,
+  VideoProviderRegistry,
+  SeedanceProvider,
+  MiniMaxH3Provider,
+  GoogleOmniProvider,
+  KlingProvider,
+  WanProvider,
+
 
   SlideshowProvider,
   safeModelError,
