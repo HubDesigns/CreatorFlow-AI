@@ -1116,6 +1116,17 @@ class SystemTest {
       for (const id of ['local_ltx', 'seedance', 'minimax_h3', 'google_omni', 'kling', 'wan', 'slideshow']) {
         if (!providers.find(provider => provider.id === id)) throw new Error(`Missing video provider: ${id}`);
       }
+
+      let localProviderUnavailableBlocked = false;
+      try {
+        new VideoProviderRegistry({}).select('local_ltx');
+      } catch (error) {
+        localProviderUnavailableBlocked = error.code === 'VIDEO_PROVIDER_UNAVAILABLE';
+      }
+      if (!localProviderUnavailableBlocked) {
+        throw new Error('An unavailable explicitly selected local model must fail rather than fall back to a cloud provider');
+      }
+
       const shortOnly = new VideoProvider('wan', { model: 'wan-test', capabilities: { minDuration: 2, maxDuration: 15, firstFrame: true } });
       shortOnly.isAvailable = () => true;
       const routed = new VideoProviderRegistry({}, { providers: { seedance: fake, wan: shortOnly } });
