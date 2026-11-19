@@ -52,7 +52,8 @@ GEMINI_API_KEY=...
 # ELEVENLABS_VOICE_ID=...
 # OPENAI_API_KEY=sk-...
 VIDEO_PROVIDER=local_ltx     # local_ltx, auto, slideshow, seedance, minimax_h3, google_omni, kling, wan
-# VIDEO_MAX_GENERATED_SECONDS=60
+VIDEO_ALLOW_PAID_PROVIDERS=false  # automatic routing stays local unless explicitly enabled
+# VIDEO_MAX_GENERATED_SECONDS=20
 
 # App
 PORT=3456
