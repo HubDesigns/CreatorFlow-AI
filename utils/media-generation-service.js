@@ -146,7 +146,7 @@ class MediaGenerationService {
         remote = await provider.getTask(task.external_task_id, task.providerData || {});
       } else {
         await this.assertNotCancelled(jobId, provider, task);
-        remote = await provider.createTask(request);
+        remote = await provider.createTask({ ...request, outputPath });
       }
       task = await this.updateTask(task, {
         status: remote.status,
