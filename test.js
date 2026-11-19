@@ -1140,6 +1140,27 @@ class SystemTest {
       if (!providerFailureSurfaced || slideshowFallbackCalls !== 0) {
         throw new Error('A failed AI video provider was hidden by a slideshow fallback');
       }
+
+      const explicitSlideshowGenerator = new AIVideoGenerator({}, {
+        mediaGeneration: {
+          generateClips: async () => ({
+            clips: [], requestedProvider: 'slideshow', actualProvider: 'slideshow',
+            settings: { mode: 'hybrid' }
+          })
+        }
+      });
+      explicitSlideshowGenerator.generateSlideshowVideo = async () => path.join(directory, 'explicit-slideshow.mp4');
+      const explicitSlideshowPath = await explicitSlideshowGenerator.generateVideo(
+        { title: 'Explicit slideshow test' }, [], null, path.join(directory, 'explicit-slideshow.mp4'),
+        { productionId: 'prod-explicit-slideshow' }
+      );
+      if (
+        explicitSlideshowPath !== path.join(directory, 'explicit-slideshow.mp4') ||
+        explicitSlideshowGenerator.lastVideoResult?.actualProvider !== 'slideshow'
+      ) {
+        throw new Error('An explicitly selected slideshow mode did not render through its local path');
+      }
+
       const listedJob = (await db.listGenerationJobs(10)).find(item => item.id === job.id);
       if (listedJob?.mediaTasks?.length !== 1 || listedJob.mediaTasks[0].external_task_id !== 'prediction-1') {
         throw new Error('Generation job history did not expose its durable provider task');
