@@ -248,11 +248,13 @@ class AIVideoGenerator {
   async generateVisualAssets(prompt, style = "ethereal", count = 1) {
     this.logger.info(`Generating ${count} visual assets with style: ${style}`);
 
-    try {
-      if (!this.openai && !this.gemini) {
-        return await this.simulateVisualAssets(prompt, style, count);
-      }
+    if (!this.openai && !this.gemini) {
+      const error = new Error('No image-generation provider is configured. Add an OpenAI or Gemini image key in Settings before generating a production video.');
+      error.code = 'IMAGE_PROVIDER_UNAVAILABLE';
+      throw error;
+    }
 
+    try {
       const enhancedPrompt = this.enhanceVisualPrompt(prompt, style);
       const localPaths = [];
 
@@ -262,11 +264,11 @@ class AIVideoGenerator {
         localPaths.push(imagePath);
       }
 
-      this.logger.info(`Generated ${localPaths.length} visual assets`);
+      this.logger.info(`Generated ${localPaths.length} real visual assets`);
       return localPaths;
     } catch (error) {
-      this.logger.error('Visual asset generation failed:', error);
-      return await this.simulateVisualAssets(prompt, style, count);
+      this.logger.error('Real visual asset generation failed; refusing placeholder assets:', error);
+      throw error;
     }
   }
 
@@ -401,67 +403,81 @@ class AIVideoGenerator {
   }
 
   async generateVideo(script, visualAssets, audioPath, outputPath, options = {}) {
-    this.logger.info('Generating video from assets...');
+    this.logger.info('Generating video from real media assets...');
     this.lastVideoResult = null;
+
     try {
-      if (this.mediaGeneration && options.productionId) {
-        const generated = await this.mediaGeneration.generateClips({
-          jobId: options.jobId || null,
-          productionId: options.productionId,
-          script,
-          visualAssets,
-          outputDir: path.dirname(outputPath)
-        });
-        if (generated.clips.length) {
-          const produced = await this.generateHybridVideo(
-            generated.clips,
-            visualAssets,
-            audioPath,
-            outputPath,
-            options.estimatedDuration || this.calculateScriptDuration(script)
-          );
+      if (!this.mediaGeneration || !options.productionId) {
+        const error = new Error('The production video pipeline is not initialized. A persisted production and media-generation service are required; refusing to create a slideshow or simulated substitute.');
+        error.code = 'VIDEO_PIPELINE_NOT_CONFIGURED';
+        throw error;
+      }
+
+      const generated = await this.mediaGeneration.generateClips({
+        jobId: options.jobId || null,
+        productionId: options.productionId,
+        script,
+        visualAssets,
+        outputDir: path.dirname(outputPath)
+      });
+
+      // Slideshow is supported only when the operator explicitly selected it.
+      if (generated.actualProvider === 'slideshow') {
+        const produced = await this.generateSlideshowVideo(script, visualAssets, audioPath, outputPath);
+        this.lastVideoResult = {
+          requestedProvider: generated.requestedProvider, actualProvider: 'slideshow',
+          model: 'local-ffmpeg', mode: 'slideshow', generatedSeconds: 0, tasks: [], scenes: []
+        };
+        return produced;
+      }
+
+      if (!generated.clips?.length) {
+        const error = new Error('The selected AI video provider returned no usable moving clips. Production has been stopped instead of silently creating a slideshow.');
+        error.code = 'AI_VIDEO_CLIPS_REQUIRED';
+        throw error;
+      }
+
+      const produced = await this.generateHybridVideo(
+        generated.clips,
+        visualAssets,
+        audioPath,
+        outputPath,
+        options.estimatedDuration || this.calculateScriptDuration(script)
+      );
+      this.lastVideoResult = {
+        requestedProvider: generated.requestedProvider,
+        actualProvider: generated.actualProvider,
+        model: generated.model,
+        mode: generated.settings.mode,
+        generatedSeconds: generated.clips.reduce((total, clip) => total + clip.duration, 0),
+        tasks: generated.clips.map(clip => ({ scene: clip.index, taskId: clip.taskId, provider: clip.provider, model: clip.model })),
+        scenes: generated.clips.map(clip => ({
+          index: clip.index, label: clip.label, prompt: clip.prompt, duration: clip.duration,
+          path: clip.path, taskId: clip.taskId, provider: clip.provider, model: clip.model
+        }))
+      };
+      return produced;
+    } catch (error) {
+      const reason = error && error.message ? error.message : String(error);
+      this.logger.error(`AI video generation failed; no slideshow or simulated fallback will be marked as success: ${reason}`, error);
+
+      if (options.allowSlideshowFallback === true) {
+        this.logger.warn('An explicit allowSlideshowFallback option was supplied; attempting the requested slideshow fallback.');
+        try {
+          const produced = await this.generateSlideshowVideo(script, visualAssets, audioPath, outputPath);
           this.lastVideoResult = {
-            requestedProvider: generated.requestedProvider,
-            actualProvider: generated.actualProvider,
-            model: generated.model,
-            mode: generated.settings.mode,
-            generatedSeconds: generated.clips.reduce((total, clip) => total + clip.duration, 0),
-            tasks: generated.clips.map(clip => ({ scene: clip.index, taskId: clip.taskId, provider: clip.provider, model: clip.model })),
-            scenes: generated.clips.map(clip => ({
-              index: clip.index, label: clip.label, prompt: clip.prompt, duration: clip.duration,
-              path: clip.path, taskId: clip.taskId, provider: clip.provider, model: clip.model
-            }))
+            requestedProvider: 'configured-provider', actualProvider: 'slideshow',
+            model: 'local-ffmpeg', mode: 'explicit-fallback', generatedSeconds: 0,
+            fallbackReason: reason, tasks: [], scenes: []
           };
           return produced;
+        } catch (fallbackError) {
+          fallbackError.message = `AI video generation failed: ${reason}. Explicit slideshow fallback also failed: ${fallbackError.message}`;
+          throw fallbackError;
         }
       }
 
-      const produced = await this.generateSlideshowVideo(script, visualAssets, audioPath, outputPath);
-      this.lastVideoResult = { requestedProvider: 'slideshow', actualProvider: 'slideshow', model: 'local-ffmpeg', mode: 'slideshow', generatedSeconds: 0, tasks: [], scenes: [] };
-      return produced;
-    } catch (error) {
-      // The Logger's console line only shows the message string, so put the real
-      // reason inline. Previously the stack alone went to the file transport and
-      // the console printed "Video generation failed:" with no detail.
-      const reason = error && error.message ? error.message : String(error);
-      this.logger.error(`Video provider generation failed; using the local slideshow: ${reason}`, error);
-      try {
-        const produced = await this.generateSlideshowVideo(script, visualAssets, audioPath, outputPath);
-        this.lastVideoResult = {
-          requestedProvider: this.lastVideoResult?.requestedProvider || 'configured-provider',
-          actualProvider: 'slideshow', model: 'local-ffmpeg', mode: 'fallback', generatedSeconds: 0,
-          fallbackReason: reason, tasks: [], scenes: []
-        };
-        return produced;
-      } catch (fallbackError) {
-        this.logger.error(`Local slideshow fallback failed: ${fallbackError.message}`, fallbackError);
-        const produced = await this.simulateVideoGeneration(script, visualAssets, audioPath, outputPath);
-        this.lastVideoResult = {
-          requestedProvider: 'configured-provider', actualProvider: 'simulation', model: null,
-          mode: 'simulation', generatedSeconds: 0, fallbackReason: `${reason}; ${fallbackError.message}`, tasks: [], scenes: []
-        };
-        return produced;
-      }
+      throw error;
     }
   }
 

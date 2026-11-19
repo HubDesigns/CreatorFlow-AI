@@ -34,6 +34,7 @@ class SystemTest {
       { name: 'Durable Multi-Provider Video Generation', test: () => this.testVideoProviderLayer() },
       { name: 'Scene Repair Studio', test: () => this.testSceneRepairStudio() },
       { name: 'Narration Reliability and Recovery', test: () => this.testNarrationReliability() },
+      { name: 'Scene Rebuild with Real FFmpeg', test: () => this.testSceneRebuildRealFFmpeg() },
       { name: 'Shorts Repurposing Studio', test: () => this.testShortsRepurposingStudio() },
       { name: 'Research and Provenance Desk', test: () => this.testProvenanceDesk() },
       { name: 'DarkzSEO Discoverability Preflight', test: () => this.testDiscoverabilityPreflight() },
@@ -1041,7 +1042,7 @@ class SystemTest {
     const { MediaGenerationService } = require('./utils/media-generation-service');
     const {
       VideoProvider, VideoProviderRegistry, SeedanceProvider, MiniMaxH3Provider,
-      GoogleOmniProvider, KlingProvider, WanProvider
+      GoogleOmniProvider, KlingProvider, WanProvider, LocalLTXProvider
     } = require('./utils/video-providers');
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'yaa-media-provider-'));
     const db = new Database();
@@ -1063,7 +1064,8 @@ class SystemTest {
         capabilities: { minDuration: 4, maxDuration: 30, cancellation: true }
       });
       fake.isAvailable = () => true;
-      fake.createTask = async () => {
+      fake.createTask = async input => {
+        if (!input.outputPath) throw new Error('Media service did not pass the local output path to the provider');
         createCalls++;
         return { externalTaskId: 'prediction-1', status: 'queued' };
       };
@@ -1096,21 +1098,170 @@ class SystemTest {
         throw new Error('Provider task identity and model evidence did not persist');
       }
       const providers = registry.list();
-      for (const id of ['seedance', 'minimax_h3', 'google_omni', 'kling', 'wan', 'slideshow']) {
+      const { getVideoProviderReadiness } = require('./utils/video-providers');
+      const readiness = getVideoProviderReadiness(registry);
+      if (readiness.ready || readiness.localReady || readiness.paidCloudAllowed || readiness.configuredCount !== 1 || readiness.paidCloudConfiguredCount !== 1 || readiness.providerCount !== 6) {
+        throw new Error('Cloud credentials alone must not mark the free local video setup as ready');
+      }
+      if (!readiness.providers.find(provider => provider.id === 'seedance')?.credentialsConfigured) {
+        throw new Error('Configured provider status was not reported');
+      }
+      const emptyReadiness = getVideoProviderReadiness(new VideoProviderRegistry({}));
+      if (emptyReadiness.ready || emptyReadiness.configuredCount !== 0 || emptyReadiness.providers.some(provider => provider.id === 'slideshow')) {
+        throw new Error('An unconfigured system must not report slideshow as AI video readiness');
+      }
+      if (!emptyReadiness.providers.find(provider => provider.id === 'kling')?.setupHint.includes('KLING_SECRET_KEY')) {
+        throw new Error('Provider setup guidance is missing the required Kling secret key');
+      }
+      for (const id of ['local_ltx', 'seedance', 'minimax_h3', 'google_omni', 'kling', 'wan', 'slideshow']) {
         if (!providers.find(provider => provider.id === id)) throw new Error(`Missing video provider: ${id}`);
       }
+
+
+      let automaticPaidFallbackBlocked = false;
+      try {
+        new VideoProviderRegistry({}, { providers: { seedance: fake } }).select('auto', ['seedance'], { duration: 4 });
+      } catch (error) {
+        automaticPaidFallbackBlocked = error.code === 'VIDEO_PROVIDER_UNAVAILABLE';
+      }
+      if (!automaticPaidFallbackBlocked) {
+        throw new Error('Automatic routing must not use a paid cloud provider without explicit opt-in');
+      }
+
+
+      let explicitPaidProviderBlocked = false;
+      try {
+        new VideoProviderRegistry({}, { providers: { seedance: fake } }).select('seedance');
+      } catch (error) {
+        explicitPaidProviderBlocked = error.code === 'PAID_VIDEO_PROVIDER_DISABLED';
+      }
+      if (!explicitPaidProviderBlocked) {
+        throw new Error('Explicit cloud video providers must remain disabled unless the user opts in');
+      }
+
+      let localProviderUnavailableBlocked = false;
+      try {
+        new VideoProviderRegistry({}).select('local_ltx');
+      } catch (error) {
+        localProviderUnavailableBlocked = error.code === 'VIDEO_PROVIDER_UNAVAILABLE';
+      }
+      if (!localProviderUnavailableBlocked) {
+        throw new Error('An unavailable explicitly selected local model must fail rather than fall back to a cloud provider');
+      }
+
       const shortOnly = new VideoProvider('wan', { model: 'wan-test', capabilities: { minDuration: 2, maxDuration: 15, firstFrame: true } });
       shortOnly.isAvailable = () => true;
-      const routed = new VideoProviderRegistry({}, { providers: { seedance: fake, wan: shortOnly } });
+      const routed = new VideoProviderRegistry({}, { providers: { seedance: fake, wan: shortOnly }, allowCloudProviders: true });
       if (routed.select('auto', ['wan', 'seedance'], { duration: 20 }).id !== 'seedance') {
         throw new Error('Automatic video routing ignored the requested duration capability');
       }
-      if (routed.select('auto', ['seedance', 'wan'], { duration: 8, generateAudio: true }).id !== 'slideshow') {
-        throw new Error('Automatic video routing selected a provider without requested native audio support');
+      let unavailableProviderBlocked = false;
+      try {
+        routed.select('auto', ['seedance', 'wan'], { duration: 8, generateAudio: true });
+      } catch (error) {
+        unavailableProviderBlocked = error.code === 'VIDEO_PROVIDER_UNAVAILABLE';
       }
+      if (!unavailableProviderBlocked) {
+        throw new Error('Automatic video routing silently selected slideshow when no compatible moving-video provider was available');
+      }
+      if (routed.select('slideshow', [], {}).id !== 'slideshow') {
+        throw new Error('Explicit slideshow selection should remain available');
+      }
+
+      const { AIVideoGenerator } = require('./utils/ai-video-generator');
+      const failClosedGenerator = new AIVideoGenerator({}, {
+        mediaGeneration: { generateClips: async () => { throw new Error('simulated provider outage'); } }
+      });
+      let slideshowFallbackCalls = 0;
+      failClosedGenerator.generateSlideshowVideo = async () => {
+        slideshowFallbackCalls++;
+        return path.join(directory, 'unexpected-slideshow.mp4');
+      };
+      let providerFailureSurfaced = false;
+      try {
+        await failClosedGenerator.generateVideo(
+          { title: 'Provider failure regression' }, [], null, path.join(directory, 'must-not-render.mp4'),
+          { productionId: 'prod-fail-closed' }
+        );
+      } catch (error) {
+        providerFailureSurfaced = /simulated provider outage/.test(error.message);
+      }
+      if (!providerFailureSurfaced || slideshowFallbackCalls !== 0) {
+        throw new Error('A failed AI video provider was hidden by a slideshow fallback');
+      }
+
+      const explicitSlideshowGenerator = new AIVideoGenerator({}, {
+        mediaGeneration: {
+          generateClips: async () => ({
+            clips: [], requestedProvider: 'slideshow', actualProvider: 'slideshow',
+            settings: { mode: 'hybrid' }
+          })
+        }
+      });
+      explicitSlideshowGenerator.generateSlideshowVideo = async () => path.join(directory, 'explicit-slideshow.mp4');
+      const explicitSlideshowPath = await explicitSlideshowGenerator.generateVideo(
+        { title: 'Explicit slideshow test' }, [], null, path.join(directory, 'explicit-slideshow.mp4'),
+        { productionId: 'prod-explicit-slideshow' }
+      );
+      if (
+        explicitSlideshowPath !== path.join(directory, 'explicit-slideshow.mp4') ||
+        explicitSlideshowGenerator.lastVideoResult?.actualProvider !== 'slideshow'
+      ) {
+        throw new Error('An explicitly selected slideshow mode did not render through its local path');
+      }
+
       const listedJob = (await db.listGenerationJobs(10)).find(item => item.id === job.id);
       if (listedJob?.mediaTasks?.length !== 1 || listedJob.mediaTasks[0].external_task_id !== 'prediction-1') {
         throw new Error('Generation job history did not expose its durable provider task');
+      }
+
+
+      const localHome = path.join(directory, 'ltx-runtime');
+      const localBase = path.join(directory, 'ltx-base');
+      const localUnet = path.join(directory, 'ltx-unet');
+      await fs.mkdir(localHome, { recursive: true });
+      await fs.mkdir(path.join(localBase, 'text_encoder'), { recursive: true });
+      await fs.mkdir(path.join(localBase, 'vae'), { recursive: true });
+      await fs.mkdir(path.join(localBase, 'scheduler'), { recursive: true });
+      await fs.mkdir(localUnet, { recursive: true });
+      await fs.writeFile(path.join(localHome, 'inference.py'), '# test fixture');
+      const { EventEmitter } = require('events');
+      let localArgs;
+      const localSpawn = (_command, args) => {
+        localArgs = args;
+        const child = new EventEmitter();
+        child.stdout = new EventEmitter();
+        child.stderr = new EventEmitter();
+        child.kill = () => {};
+        const outputDir = args[args.indexOf('--output_path') + 1];
+        setImmediate(async () => {
+          await fs.copyFile(source, path.join(outputDir, 'local-ltx-test.mp4'));
+          child.emit('close', 0);
+        });
+        return child;
+      };
+      const localProvider = new LocalLTXProvider({}, {
+        home: localHome, checkpointDir: localBase, unetPath: localUnet, spawn: localSpawn
+      });
+      if (!localProvider.isAvailable()) throw new Error('Local LTX readiness did not detect the installed runtime fixture');
+      const localTask = await localProvider.createTask({
+        prompt: 'A cinematic test scene', duration: 5,
+        outputPath: path.join(directory, 'local-ltx-output.mp4')
+      });
+
+      const localReadiness = getVideoProviderReadiness(new VideoProviderRegistry({}, { providers: { local_ltx: localProvider } }));
+      if (!localReadiness.ready || !localReadiness.localReady || localReadiness.configuredCount !== 1 || !localReadiness.providers.find(provider => provider.id === 'local_ltx')?.installed) {
+        throw new Error('An installed local LTX provider should mark free video readiness as ready');
+      }
+
+      const localOutput = path.join(directory, 'local-ltx-output.mp4');
+      await localProvider.downloadResult(localTask, localOutput);
+      if (
+        !localArgs.includes('--low_vram') ||
+        localArgs[localArgs.indexOf('--num_frames') + 1] !== '121' ||
+        !(await fs.readFile(localOutput)).equals(await fs.readFile(source))
+      ) {
+        throw new Error('Local LTX did not use its low-VRAM profile or copy the generated MP4');
       }
 
       let seedanceSubmission;
@@ -1360,6 +1511,100 @@ class SystemTest {
       await fs.rm(directory, { recursive: true, force: true });
     }
     this.logger.info('Scene Repair Studio test completed successfully');
+  }
+
+  async testSceneRebuildRealFFmpeg() {
+    // Regression: rebuild() wrote the scene narration mix into <dataRoot>/audio without creating
+    // that folder, so FFmpeg exited 254 and the route answered HTTP 400 on a fresh data root.
+    // Unlike the other scene tests this one uses the real generator and real FFmpeg (no stubs).
+    const fs = require('fs').promises;
+    const os = require('os');
+    const sharp = require('sharp');
+    const { SceneRepairService } = require('./utils/scene-repair-service');
+    const { AIVideoGenerator } = require('./utils/ai-video-generator');
+    const { runFFmpeg, getMediaDuration, checkFFmpeg } = require('./utils/ffmpeg');
+    if (!await checkFFmpeg()) {
+      this.logger.warn('FFmpeg is not available; skipping the real-FFmpeg scene rebuild test');
+      return;
+    }
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'yaa-real-rebuild-'));
+    const db = new Database();
+    db.dbPath = path.join(directory, 'real-rebuild.db');
+    await db.initialize();
+
+    try {
+      const productionId = 'prod_real_rebuild';
+      const sceneInputs = [];
+      for (let index = 0; index < 2; index++) {
+        const imagePath = path.join(directory, `scene${index}.png`);
+        const audioPath = path.join(directory, `scene${index}.m4a`);
+        await sharp({ create: { width: 640, height: 360, channels: 3, background: index ? '#5f2040' : '#203a5f' } }).png().toFile(imagePath);
+        // A locally generated tone fixture: proves the mux path, it is not synthesized speech.
+        await runFFmpeg(['-y', '-f', 'lavfi', '-i', `sine=frequency=${220 + index * 110}:duration=2`, '-c:a', 'aac', audioPath]);
+        sceneInputs.push({ imagePath, audioPath });
+      }
+      const oldVideoPath = path.join(directory, 'old.mp4');
+      await fs.writeFile(oldVideoPath, Buffer.from('previous final video'));
+      const production = {
+        id: productionId, status: 'ready',
+        script: { title: 'TEST real rebuild', fullScript: 'A clearly identified test production used to verify the real FFmpeg scene rebuild. '.repeat(3) },
+        seo: { title: 'TEST real rebuild', description: 'A test production used only to verify the real FFmpeg scene rebuild path.', tags: ['test'] },
+        strategy: { topic: 'TEST real rebuild' },
+        assets: {
+          audio: { path: sceneInputs[0].audioPath, status: 'ready', simulated: false, provider: 'fixture-tone' },
+          thumbnail: { path: sceneInputs[0].imagePath },
+          finalVideo: { path: oldVideoPath, simulated: true, duration: '0:04' }
+        },
+        timeline: {}, priority: 50, scheduledPublishTime: new Date(Date.now() + 86400000).toISOString()
+      };
+      await db.saveProductionData(production);
+      await db.saveProductionSnapshot(production);
+      await db.saveContentReview(productionId, { status: 'needs_review', editorData: {}, qualityChecks: [] });
+      await db.saveContentProvenance(productionId, {
+        sources: [], claims: [], containsSyntheticMedia: false, status: 'not_required',
+        summary: { sourceCount: 0, verifiedSources: 0, claimCount: 0, resolvedClaims: 0, highRiskClaims: 0, unresolvedClaims: 0 }
+      });
+      await db.replaceProductionScenes(productionId, sceneInputs.map((input, index) => ({
+        id: `scene-real-${index + 1}`, label: index ? 'Outro' : 'Hook', scriptText: `Real rebuild scene ${index + 1}.`,
+        prompt: 'Test visual', duration: 2, assetType: 'image', assetOrigin: 'generated', assetPath: input.imagePath,
+        status: index ? 'ready' : 'needs_rebuild', rightsConfirmed: true
+      })));
+      for (const [index, input] of sceneInputs.entries()) {
+        await db.updateProductionScene(productionId, `scene-real-${index + 1}`, {
+          audioPath: input.audioPath, narrationStatus: 'current', narrationProvider: 'fixture-tone', narrationModel: 'sine'
+        });
+      }
+
+      const generator = new AIVideoGenerator({}, { db });
+      const service = new SceneRepairService(db, generator, { dataRoot: directory, logger: this.logger });
+      const rebuilt = await service.rebuild(productionId);
+
+      const stats = await fs.stat(rebuilt.finalVideo);
+      if (!stats.size) throw new Error('Real scene rebuild produced an empty video file');
+      let decodeOutput = '';
+      try {
+        const { stderr } = await runFFmpeg(['-v', 'error', '-i', rebuilt.finalVideo, '-f', 'null', '-']);
+        decodeOutput = String(stderr || '').trim();
+      } catch (error) {
+        throw new Error(`Rebuilt video is not decodable: ${String(error.stderr || error.message).slice(0, 200)}`);
+      }
+      if (decodeOutput) throw new Error(`Rebuilt video decoded with errors: ${decodeOutput.slice(0, 200)}`);
+      let streamInfo = '';
+      await runFFmpeg(['-i', rebuilt.finalVideo]).catch(error => { streamInfo = String(error.stderr || ''); });
+      if (!/Video: h264/.test(streamInfo) || !/Audio: aac/.test(streamInfo)) {
+        throw new Error('Rebuilt video is missing its H.264 video stream or AAC audio stream');
+      }
+      const duration = await getMediaDuration(rebuilt.finalVideo);
+      if (Math.abs(duration - 4) > 0.5) throw new Error(`Rebuilt video duration ${duration}s does not match the 4s scene timeline`);
+      const bundle = await db.getProductionBundle(productionId);
+      if (bundle.assets.finalVideo.simulated !== false || bundle.scenes.some(scene => scene.status !== 'ready')) {
+        throw new Error('Real rebuild did not record a non-simulated final video with every scene ready');
+      }
+    } finally {
+      await db.close();
+      await fs.rm(directory, { recursive: true, force: true });
+    }
+    this.logger.info('Scene rebuild with real FFmpeg test completed successfully');
   }
 
   async testNarrationReliability() {
@@ -2224,6 +2469,46 @@ class SystemTest {
       throw new Error('Initial scene generation mixed hardcoded ethereal cues with the configured visual style');
     }
 
+    const failedVisualAgent = Object.create(ProductionManagementAgent.prototype);
+    failedVisualAgent.db = { getChannelProfile: async () => ({ visual_style: 'cinematic' }) };
+    failedVisualAgent.logger = this.logger;
+    failedVisualAgent.aiVideoGenerator = {
+      generateVisualAssets: async () => { throw new Error('image provider unavailable'); }
+    };
+    let placeholderVisualsBlocked = false;
+    try {
+      await failedVisualAgent.generateVideoContent({
+        script: { title: 'Must not become a placeholder', mainContent: { sections: [] } },
+        assets: {}, timeline: {}
+      });
+    } catch (error) {
+      placeholderVisualsBlocked = /image provider unavailable/.test(error.message);
+    }
+    if (!placeholderVisualsBlocked) {
+      throw new Error('Failed real-image generation was converted into placeholder slide elements');
+    }
+
+    const failedAssemblyAgent = Object.create(ProductionManagementAgent.prototype);
+    failedAssemblyAgent.logger = this.logger;
+    failedAssemblyAgent.aiVideoGenerator = {
+      isUsableAudioFile: async () => true,
+      generateVideo: async () => { throw new Error('moving video provider unavailable'); },
+      lastVideoResult: null
+    };
+    let simulatedAssemblyBlocked = false;
+    try {
+      await failedAssemblyAgent.assembleVideo({
+        id: 'must-not-simulate', jobId: 'job-fail-closed', script: { title: 'Fail closed' },
+        assets: { video: { visualAssets: [] }, audio: { path: 'narration.mp3' } },
+        estimatedDuration: '0:30'
+      });
+    } catch (error) {
+      simulatedAssemblyBlocked = /moving video provider unavailable/.test(error.message);
+    }
+    if (!simulatedAssemblyBlocked) {
+      throw new Error('Failed video rendering was converted into a simulated final production');
+    }
+
     const pipeline = new YouTubeAutomationAgent();
     pipeline.db = {
       getChannelProfile: async () => ({}),
@@ -2520,6 +2805,27 @@ class SystemTest {
 
     if (agent.publishQueue.length !== 1 || agent.publishQueue[0].productionId !== 'prod-b') {
       throw new Error('publishContent removed the wrong publish queue entries');
+    }
+
+    const futureScheduled = new PublishingSchedulingAgent({
+      updateScheduleEntry: async () => {}
+    }, {});
+    const futureEntry = {
+      id: 'schedule-future',
+      productionId: 'prod-future',
+      title: 'Future scheduled video',
+      status: 'scheduled',
+      publishTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+      metadata: { audio: intentionalAudio }
+    };
+    futureScheduled.publishQueue = [futureEntry];
+    futureScheduled.uploadToYouTube = async () => ({ id: 'youtube-future' });
+    const futureResult = await futureScheduled.publishContent('prod-future');
+    if (futureResult.status !== 'uploaded' || futureResult.publishedAt !== null) {
+      throw new Error('A future YouTube upload was incorrectly marked as already published');
+    }
+    if (futureScheduled.publishQueue.length !== 0) {
+      throw new Error('A future video accepted by YouTube remained in the local upload queue');
     }
 
     const missingNarration = new PublishingSchedulingAgent({ updateScheduleEntry: async () => {} }, {});
@@ -2983,6 +3289,15 @@ class SystemTest {
       const none = new AIVideoGenerator({});
       if (none.gemini || none.openai) {
         throw new Error('Media services initialized without any credentials');
+      }
+      let missingImageProviderBlocked = false;
+      try {
+        await none.generateVisualAssets('A real production image', 'cinematic', 1);
+      } catch (error) {
+        missingImageProviderBlocked = error.code === 'IMAGE_PROVIDER_UNAVAILABLE';
+      }
+      if (!missingImageProviderBlocked) {
+        throw new Error('Missing image credentials silently produced simulated placeholder artwork');
       }
     } finally {
       for (const key of envKeys) {

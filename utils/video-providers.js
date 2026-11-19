@@ -2,9 +2,11 @@ const crypto = require('crypto');
 const fs = require('fs').promises;
 const path = require('path');
 const axios = require('axios');
+const fsSync = require('fs');
+const { spawn: nodeSpawn } = require('child_process');
 const Replicate = require('replicate');
 
-const DEFAULT_PROVIDER_ORDER = ['seedance', 'minimax_h3', 'google_omni', 'kling', 'wan', 'slideshow'];
+const DEFAULT_PROVIDER_ORDER = ['local_ltx', 'seedance', 'minimax_h3', 'google_omni', 'kling', 'wan', 'slideshow'];
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value)));
 
@@ -409,6 +411,149 @@ class WanProvider extends VideoProvider {
   }
 }
 
+
+class LocalLTXProvider extends VideoProvider {
+  constructor(_credentials = {}, options = {}) {
+    super('local_ltx', {
+      model: 'LTX-Video 2B Q8 (local)',
+      capabilities: {
+        minDuration: 1, maxDuration: 5, defaultResolution: '480p', maxPromptLength: 2000,
+        text: true, firstFrame: true, referenceImages: 0, nativeAudio: false, cancellation: false,
+        local: true
+      }
+    });
+    this.home = path.resolve(options.home || process.env.LTX_VIDEO_HOME || path.join(process.cwd(), 'models', 'LTX-Video-Q8'));
+    this.checkpointDir = path.resolve(options.checkpointDir || process.env.LTX_CHECKPOINT_DIR || path.join(process.cwd(), 'models', 'LTX-Video-Base'));
+    this.unetPath = path.resolve(options.unetPath || process.env.LTX_UNET_PATH || path.join(process.cwd(), 'models', 'ltxvideo_q8'));
+    this.python = options.python || process.env.LTX_PYTHON || 'python';
+    this.spawn = options.spawn || nodeSpawn;
+    this.width = Math.max(320, Number(options.width || process.env.LTX_WIDTH || 704));
+    this.height = Math.max(256, Number(options.height || process.env.LTX_HEIGHT || 480));
+    this.steps = Math.max(8, Math.min(60, Number(options.steps || process.env.LTX_INFERENCE_STEPS || 30)));
+    this.frameRate = Math.max(12, Math.min(30, Number(options.frameRate || process.env.LTX_FRAME_RATE || 25)));
+    this.timeoutMs = Math.max(60000, Number(options.timeoutMs || process.env.LTX_TIMEOUT_MS || 5400000));
+  }
+
+  isAvailable() {
+    return fsSync.existsSync(path.join(this.home, 'inference.py')) &&
+      fsSync.existsSync(path.join(this.checkpointDir, 'text_encoder')) &&
+      fsSync.existsSync(path.join(this.checkpointDir, 'vae')) &&
+      fsSync.existsSync(path.join(this.checkpointDir, 'scheduler')) &&
+      fsSync.existsSync(this.unetPath);
+  }
+
+  async resolveInputImage(value, runDir) {
+    if (!value) return null;
+    const destination = path.join(runDir, 'reference-image.png');
+    if (/^data:image\//i.test(String(value))) {
+      const match = String(value).match(/^data:image\/[^;]+;base64,(.+)$/);
+      if (!match) throw new Error('Local LTX received an unsupported image data URL');
+      await fs.writeFile(destination, Buffer.from(match[1], 'base64'));
+      return destination;
+    }
+    if (/^https?:\/\//i.test(String(value))) {
+      const response = await axios.get(value, { responseType: 'arraybuffer', timeout: 60000 });
+      await fs.writeFile(destination, Buffer.from(response.data));
+      return destination;
+    }
+    const source = path.resolve(String(value));
+    const stat = await fs.stat(source).catch(() => null);
+    if (!stat?.isFile()) throw new Error('Local LTX reference image was not found: ' + path.basename(source));
+    return source;
+  }
+
+  async createTask(input = {}) {
+    if (!this.isAvailable()) {
+      const error = new Error('Local LTX-Video is not installed. Follow the local LTX setup guide and configure LTX_VIDEO_HOME, LTX_CHECKPOINT_DIR, and LTX_UNET_PATH.');
+      error.code = 'VIDEO_PROVIDER_UNAVAILABLE';
+      throw error;
+    }
+    if (!input.outputPath) throw new Error('Local LTX requires an outputPath from the production pipeline');
+    const runId = 'ltx_' + Date.now() + '_' + crypto.randomBytes(4).toString('hex');
+    const runDir = path.join(path.dirname(input.outputPath), '.' + runId);
+    await fs.mkdir(runDir, { recursive: true });
+    try {
+      const imagePath = await this.resolveInputImage(input.firstFrame, runDir);
+      const requestedFrames = Math.round(Number(input.duration || 4) * this.frameRate);
+      const frameCount = Math.max(17, Math.min(121, Math.floor((requestedFrames - 1) / 8) * 8 + 1));
+      const args = [
+        path.join(this.home, 'inference.py'),
+        '--low_vram',
+        '--transformer_type=q8_kernels',
+        '--ckpt_dir', this.checkpointDir,
+        '--unet_path', this.unetPath,
+        '--prompt', String(input.prompt || '').slice(0, 2000),
+        '--height', String(this.height),
+        '--width', String(this.width),
+        '--num_frames', String(frameCount),
+        '--frame_rate', String(this.frameRate),
+        '--num_inference_steps', String(this.steps),
+        '--guidance_scale', '3',
+        '--output_path', runDir
+      ];
+      if (imagePath) args.push('--input_image_path', imagePath);
+
+      let stdout = '';
+      let stderr = '';
+      await new Promise((resolve, reject) => {
+        const child = this.spawn(this.python, args, {
+          cwd: this.home,
+          windowsHide: true,
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+        let settled = false;
+        let timer = null;
+        const finish = (error) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          if (error) reject(error);
+          else resolve();
+        };
+        timer = setTimeout(() => {
+          child.kill();
+          finish(new Error('Local LTX generation exceeded ' + Math.round(this.timeoutMs / 60000) + ' minutes and was stopped'));
+        }, this.timeoutMs);
+        child.stdout?.on('data', chunk => { stdout = (stdout + chunk.toString()).slice(-6000); });
+        child.stderr?.on('data', chunk => { stderr = (stderr + chunk.toString()).slice(-6000); });
+        child.once('error', error => finish(new Error('Could not start local LTX Python runtime: ' + error.message)));
+        child.once('close', code => {
+          if (code === 0) finish();
+          else finish(new Error('Local LTX inference exited with code ' + code + '. ' + (stderr || stdout || 'No diagnostic output was returned.')));
+        });
+      });
+
+      const files = (await fs.readdir(runDir))
+        .filter(name => name.toLowerCase().endsWith('.mp4'))
+        .map(name => path.join(runDir, name));
+      if (!files.length) throw new Error(('Local LTX finished without producing an MP4. ' + (stderr || stdout)).slice(0, 1500));
+      return {
+        externalTaskId: runId,
+        status: 'succeeded',
+        outputUrl: files[0],
+        model: this.model,
+        localRunDir: runDir,
+        error: null
+      };
+    } catch (error) {
+      await fs.rm(runDir, { recursive: true, force: true }).catch(() => {});
+      throw error;
+    }
+  }
+
+  async getTask(id) {
+    return { externalTaskId: id, status: 'failed', outputUrl: null, error: 'Local LTX tasks run synchronously and cannot be resumed after process restart' };
+  }
+
+  async downloadResult(task, outputPath) {
+    if (!task.outputUrl || !fsSync.existsSync(task.outputUrl)) throw new Error('Local LTX output MP4 is missing');
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
+    await fs.copyFile(task.outputUrl, outputPath);
+    if (task.localRunDir) await fs.rm(task.localRunDir, { recursive: true, force: true }).catch(() => {});
+    return outputPath;
+  }
+}
+
 class SlideshowProvider extends VideoProvider {
   constructor() {
     super('slideshow', { model: 'local-ffmpeg', capabilities: { local: true, text: true, maxDuration: Infinity } });
@@ -419,7 +564,9 @@ class SlideshowProvider extends VideoProvider {
 class VideoProviderRegistry {
   constructor(credentials = {}, options = {}) {
     const injected = options.providers || {};
+    this.allowCloudProviders = options.allowCloudProviders ?? process.env.VIDEO_ALLOW_PAID_PROVIDERS === 'true';
     this.providers = new Map([
+      ['local_ltx', injected.local_ltx || new LocalLTXProvider(credentials, options.local_ltx)],
       ['seedance', injected.seedance || new SeedanceProvider(credentials, options.seedance)],
       ['minimax_h3', injected.minimax_h3 || new MiniMaxH3Provider(credentials, options.minimax_h3)],
       ['google_omni', injected.google_omni || new GoogleOmniProvider(credentials, options.google_omni)],
@@ -432,18 +579,68 @@ class VideoProviderRegistry {
   get(id) { return this.providers.get(id); }
   list() { return Array.from(this.providers.values()).map(provider => provider.describe()); }
 
-  select(requested = 'slideshow', order = DEFAULT_PROVIDER_ORDER, request = {}) {
+  select(requested = 'auto', order = DEFAULT_PROVIDER_ORDER, request = {}) {
     if (requested && requested !== 'auto') {
+      if (requested !== 'local_ltx' && requested !== 'slideshow' && !this.allowCloudProviders) {
+        const error = new Error('Paid cloud video providers are disabled. Select local_ltx, or explicitly enable VIDEO_ALLOW_PAID_PROVIDERS=true to use cloud generation.');
+        error.code = 'PAID_VIDEO_PROVIDER_DISABLED';
+        throw error;
+      }
       const provider = this.get(requested);
-      return provider?.isAvailable() ? provider : this.get('slideshow');
+      if (provider?.isAvailable()) return provider;
+      const error = new Error(`The selected video provider "${requested}" is not configured or available. Configure its credentials in Settings, or select Auto to use another available video provider.`);
+      error.code = 'VIDEO_PROVIDER_UNAVAILABLE';
+      throw error;
     }
+
     for (const id of order) {
+      if (id === 'slideshow') continue;
+      if (id !== 'local_ltx' && !this.allowCloudProviders) continue;
       const provider = this.get(id);
       if (provider?.isAvailable() && provider.supports(request)) return provider;
     }
-    return this.get('slideshow');
+
+    const error = new Error('No compatible free local AI video provider is installed. Install Local LTX-Video, or explicitly opt in to paid cloud video providers with VIDEO_ALLOW_PAID_PROVIDERS=true. Slideshow is available only when selected explicitly.');
+    error.code = 'VIDEO_PROVIDER_UNAVAILABLE';
+    throw error;
   }
 }
+
+const PROVIDER_SETUP_HINTS = {
+  local_ltx: 'Install the free LTX-Video Q8 runtime and model files locally; no API key or cloud subscription is required. See docs/local-ltx-video.md.',
+  seedance: 'Add a Replicate API token (REPLICATE_API_TOKEN) or save it under Settings credentials → replicate.apiKey.',
+  minimax_h3: 'Add a MiniMax API key (MINIMAX_API_KEY) or save it under Settings credentials → minimax.apiKey.',
+  google_omni: 'Add a Gemini API key (GEMINI_API_KEY) or save it under Settings credentials → gemini.apiKey.',
+  kling: 'Add both KLING_ACCESS_KEY and KLING_SECRET_KEY, or save both under Settings credentials → kling.',
+  wan: 'Add a DashScope API key (DASHSCOPE_API_KEY) or save it under Settings credentials → wan.apiKey.'
+};
+
+function getVideoProviderReadiness(registry) {
+  const providers = (registry?.list?.() || [])
+    .filter(provider => provider.id !== 'slideshow')
+    .map(provider => ({
+      id: provider.id,
+      model: provider.model || null,
+      credentialsConfigured: provider.id === 'local_ltx' ? false : provider.available === true,
+      installed: provider.id === 'local_ltx' ? provider.available === true : undefined,
+      setupHint: PROVIDER_SETUP_HINTS[provider.id] || 'Configure this provider in Settings.'
+    }));
+  const configuredCount = providers.filter(provider => provider.credentialsConfigured || provider.installed).length;
+  const localReady = providers.some(provider => provider.id === 'local_ltx' && provider.installed === true);
+  const paidCloudConfiguredCount = providers.filter(provider => provider.id !== 'local_ltx' && provider.credentialsConfigured).length;
+  const paidCloudAllowed = registry?.allowCloudProviders === true;
+  return {
+    ready: localReady || (paidCloudAllowed && paidCloudConfiguredCount > 0),
+    localReady,
+    paidCloudAllowed,
+    paidCloudConfiguredCount,
+    configuredCount,
+    providerCount: providers.length,
+    providers,
+    note: 'Ready means the free local LTX installation paths are present, unless paid cloud providers were explicitly enabled. Local path checks do not validate Python, PyTorch, CUDA, Q8 kernels, GPU memory, or successful inference. Cloud credential presence does not verify billing, quota, or live API access.'
+  };
+}
+
 
 module.exports = {
   DEFAULT_PROVIDER_ORDER,
@@ -454,6 +651,8 @@ module.exports = {
   GoogleOmniProvider,
   KlingProvider,
   WanProvider,
+  LocalLTXProvider,
   SlideshowProvider,
-  safeModelError
+  safeModelError,
+  getVideoProviderReadiness
 };

@@ -16,8 +16,8 @@ class YouTubeAutomationSetup {
   }
 
   async run() {
-    console.log(chalk.cyan.bold('\nðŸŽ¬ YouTube Automation Agent Setup'));
-    console.log(chalk.gray('â•'.repeat(60)));
+    console.log(chalk.cyan.bold('\n🎬 YouTube Automation Agent Setup'));
+    console.log(chalk.gray('═'.repeat(60)));
     console.log(chalk.cyan('Welcome to the YouTube Automation Agent setup wizard!'));
     console.log(chalk.gray('This will configure your system for fully automated YouTube content creation.\n'));
 
@@ -26,8 +26,8 @@ class YouTubeAutomationSetup {
       name: 'mode',
       message: 'How would you like to set up?',
       choices: [
-        { name: 'ðŸ§­ Guided walkthrough â€” explains everything, tests keys as you go (recommended for first-timers)', value: 'walkthrough' },
-        { name: 'âš¡ Classic quick setup â€” for users who already have all their keys', value: 'classic' }
+        { name: '🧭 Guided walkthrough — explains everything, tests keys as you go (recommended for first-timers)', value: 'walkthrough' },
+        { name: '⚡ Classic quick setup — for users who already have all their keys', value: 'classic' }
       ]
     }]);
 
@@ -58,24 +58,24 @@ class YouTubeAutomationSetup {
       // Step 7: Final validation
       await this.validateSetup();
       
-      console.log(chalk.green.bold('\nðŸŽ‰ Setup completed successfully!'));
-      console.log(chalk.cyan('\nðŸ“‹ Next steps:'));
+      console.log(chalk.green.bold('\n🎉 Setup completed successfully!'));
+      console.log(chalk.cyan('\n📋 Next steps:'));
       console.log(chalk.white('1. Run: npm start'));
       console.log(chalk.white('2. Visit: http://localhost:3456'));
       console.log(chalk.white('3. Your first video will be generated and scheduled within 24 hours'));
       
-      console.log(chalk.gray('\nâ•'.repeat(60)));
-      console.log(chalk.yellow('ðŸ¤– Your YouTube channel is now fully automated!'));
+      console.log(chalk.gray('\n═'.repeat(60)));
+      console.log(chalk.yellow('🤖 Your YouTube channel is now fully automated!'));
 
     } catch (error) {
-      console.log(chalk.red.bold('\nâŒ Setup failed!'));
+      console.log(chalk.red.bold('\n❌ Setup failed!'));
       console.log(chalk.red(error.message));
       process.exit(1);
     }
   }
 
   async createDirectories() {
-    console.log(chalk.cyan('\nðŸ“ Creating directory structure...'));
+    console.log(chalk.cyan('\n📁 Creating directory structure...'));
     
     const directories = [
       'config',
@@ -95,22 +95,22 @@ class YouTubeAutomationSetup {
     for (const dir of directories) {
       const fullPath = path.join(__dirname, dir);
       await fs.mkdir(fullPath, { recursive: true });
-      console.log(chalk.gray(`  âœ“ Created: ${dir}`));
+      console.log(chalk.gray(`  ✓ Created: ${dir}`));
     }
 
-    console.log(chalk.green('âœ… Directory structure created'));
+    console.log(chalk.green('✅ Directory structure created'));
   }
 
   async initializeDatabase() {
-    console.log(chalk.cyan('\nðŸ—„ï¸  Initializing database...'));
+    console.log(chalk.cyan('\n🗄️  Initializing database...'));
     
     await this.database.initialize();
     
-    console.log(chalk.green('âœ… Database initialized'));
+    console.log(chalk.green('✅ Database initialized'));
   }
 
   async createEnvironmentFile() {
-    console.log(chalk.cyan('\nðŸ”§ Creating environment configuration...'));
+    console.log(chalk.cyan('\n🔧 Creating environment configuration...'));
     
     const envContent = `# YouTube Automation Agent Environment Configuration
 # Generated on ${new Date().toISOString()}
@@ -170,12 +170,12 @@ SCREENSHOT_PATH=./debug/screenshots
 `;
 
     await fs.writeFile(path.join(__dirname, '.env'), envContent);
-    console.log(chalk.green('âœ… Environment file created'));
+    console.log(chalk.green('✅ Environment file created'));
   }
 
 
   async installDependencies() {
-    console.log(chalk.cyan('\nðŸ“¦ Checking dependencies...'));
+    console.log(chalk.cyan('\n📦 Checking dependencies...'));
     
     try {
       // Check if package.json exists and dependencies are installed
@@ -183,17 +183,17 @@ SCREENSHOT_PATH=./debug/screenshots
       
       try {
         await fs.access(nodeModulesPath);
-        console.log(chalk.green('âœ… Dependencies already installed'));
+        console.log(chalk.green('✅ Dependencies already installed'));
       } catch (error) {
-        console.log(chalk.yellow('âš ï¸  Dependencies not installed. Please run: npm install'));
+        console.log(chalk.yellow('⚠️  Dependencies not installed. Please run: npm install'));
       }
     } catch (error) {
-      console.log(chalk.yellow('âš ï¸  Could not verify dependencies'));
+      console.log(chalk.yellow('⚠️  Could not verify dependencies'));
     }
   }
 
   async createStartupScripts() {
-    console.log(chalk.cyan('\nðŸš€ Creating startup scripts...'));
+    console.log(chalk.cyan('\n🚀 Creating startup scripts...'));
     
     // Create Windows batch file
     const windowsScript = `@echo off
@@ -231,11 +231,11 @@ node index.js`;
       `module.exports = ${JSON.stringify(pm2Config, null, 2)};`
     );
     
-    console.log(chalk.green('âœ… Startup scripts created'));
+    console.log(chalk.green('✅ Startup scripts created'));
   }
 
   async validateSetup() {
-    console.log(chalk.cyan('\nðŸ” Validating setup...'));
+    console.log(chalk.cyan('\n🔍 Validating setup...'));
 
     const validation = {
       directories: true,
@@ -279,33 +279,33 @@ node index.js`;
 
     // Display validation results
     Object.entries(validation).forEach(([component, valid]) => {
-      const icon = valid ? 'âœ…' : 'âŒ';
+      const icon = valid ? '✅' : '❌';
       const color = valid ? chalk.green : chalk.red;
       console.log(color(`  ${icon} ${component}`));
     });
 
-    // Only broken infrastructure is fatal â€” missing credentials/FFmpeg can be fixed later
+    // Only broken infrastructure is fatal — missing credentials/FFmpeg can be fixed later
     if (!validation.directories || !validation.database || !validation.environment) {
       throw new Error('Setup validation failed. Please check the errors above.');
     }
 
     if (!validation.credentials) {
-      console.log(chalk.yellow('\nâš ï¸  Credentials are incomplete. Finish them any time with: npm run credentials:setup'));
+      console.log(chalk.yellow('\n⚠️  Credentials are incomplete. Finish them any time with: npm run credentials:setup'));
     }
 
     if (!validation.ffmpeg) {
-      console.log(chalk.yellow(`\nâš ï¸  ${ffmpegInstallHint()}`));
+      console.log(chalk.yellow(`\n⚠️  ${ffmpegInstallHint()}`));
     }
 
     if (validation.credentials && validation.ffmpeg) {
-      console.log(chalk.green('âœ… All validations passed'));
+      console.log(chalk.green('✅ All validations passed'));
     } else {
-      console.log(chalk.yellow('âœ… Core setup complete (with warnings above)'));
+      console.log(chalk.yellow('✅ Core setup complete (with warnings above)'));
     }
   }
 
   async createSampleContent() {
-    console.log(chalk.cyan('\nðŸ“ Creating sample content templates...'));
+    console.log(chalk.cyan('\n📝 Creating sample content templates...'));
     
     // Create sample script template
     const sampleScript = {
@@ -338,7 +338,7 @@ node index.js`;
       JSON.stringify(sampleScript, null, 2)
     );
 
-    console.log(chalk.green('âœ… Sample content created'));
+    console.log(chalk.green('✅ Sample content created'));
   }
 }
 

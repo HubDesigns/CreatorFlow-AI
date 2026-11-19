@@ -34,7 +34,7 @@ class DailyAutomation {
         if (this.isEnabled) {
           await this.runDailyContentGeneration();
         }
-      }, { scheduled: false })
+      }, { scheduled: false, timezone: 'Asia/Karachi' })
     );
 
     // Publishing queue processing every 15 minutes
@@ -43,7 +43,7 @@ class DailyAutomation {
         if (this.isEnabled) {
           await this.processPublishQueue();
         }
-      }, { scheduled: false })
+      }, { scheduled: false, timezone: 'Asia/Karachi' })
     );
 
     // Analytics collection at 9:00 AM daily
@@ -52,7 +52,7 @@ class DailyAutomation {
         if (this.isEnabled) {
           await this.collectDailyAnalytics();
         }
-      }, { scheduled: false })
+      }, { scheduled: false, timezone: 'Asia/Karachi' })
     );
 
     // Weekly strategy review on Sundays at 8:00 AM
@@ -61,7 +61,7 @@ class DailyAutomation {
         if (this.isEnabled) {
           await this.weeklyStrategyReview();
         }
-      }, { scheduled: false })
+      }, { scheduled: false, timezone: 'Asia/Karachi' })
     );
 
     // Optimization tasks daily at 10:00 PM
@@ -70,7 +70,7 @@ class DailyAutomation {
         if (this.isEnabled) {
           await this.runDailyOptimization();
         }
-      }, { scheduled: false })
+      }, { scheduled: false, timezone: 'Asia/Karachi' })
     );
 
     // Database maintenance weekly on Saturdays at 3:00 AM
@@ -79,7 +79,7 @@ class DailyAutomation {
         if (this.isEnabled) {
           await this.databaseMaintenance();
         }
-      }, { scheduled: false })
+      }, { scheduled: false, timezone: 'Asia/Karachi' })
     );
 
     // Audience comment sync every 4 hours; the service's own taper decides which videos are due
@@ -88,7 +88,7 @@ class DailyAutomation {
         if (this.isEnabled) {
           await this.collectAudienceEngagement();
         }
-      }, { scheduled: false })
+      }, { scheduled: false, timezone: 'Asia/Karachi' })
     );
 
     // Collect controlled experiment evidence and advance only pre-approved arms.
@@ -97,7 +97,7 @@ class DailyAutomation {
         if (this.isEnabled) {
           await this.refreshGrowthExperiments();
         }
-      }, { scheduled: false })
+      }, { scheduled: false, timezone: 'Asia/Karachi' })
     );
 
     // Start all scheduled tasks
@@ -160,7 +160,7 @@ class DailyAutomation {
       if (scheduleEntry) {
         this.logger.info('Content scheduled for publishing');
       } else {
-        this.logger.warn('Content was NOT scheduled â€” production produced placeholder assets. See warnings above.');
+        this.logger.warn('Content was NOT scheduled — production produced placeholder assets. See warnings above.');
       }
 
       timer.end();

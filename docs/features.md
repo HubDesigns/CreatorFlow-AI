@@ -46,11 +46,11 @@ Autonomous Operator runs preserve their research and editorial plan, so **Resume
 
 ## AI video generation
 
-Local slideshow rendering is the default, so upgrading does not start paid video requests. The slideshow is rendered in headless Chromium (install it once with `npx playwright install chromium`) and assembled with FFmpeg. Generated images fill each slide; slides without an image use a gradient background.
+Automatic AI-video routing is the default for production, so at least one supported video provider must be configured before generating a finished video. Local slideshow rendering remains available as an explicit mode and is rendered in headless Chromium (install it once with `npx playwright install chromium`) and assembled with FFmpeg.
 
 To generate real clips, choose a provider in **Channel setup**, set a paid-seconds cap, then run the separately opted-in paid video readiness probe. The supported providers and their clip limits are listed in [AI providers](providers.md#video).
 
-Long-form productions use hybrid assembly: the agent generates bounded provider clips for the hook and important sections, fills the remaining timeline locally, mixes the existing narration, and keeps the generated caption file alongside the production. As soon as a provider returns its task ID, the agent persists it before polling, so interrupted jobs can resume that known task instead of submitting it again. If a provider fails, the production falls back to the local slideshow.
+Long-form productions use hybrid assembly: the agent generates bounded provider clips for the hook and important sections, then uses real generated still images to fill remaining timeline sections, mixes narration, and keeps captions alongside the production. As soon as a provider returns its task ID, the agent persists it before polling, so interrupted jobs can resume that known task instead of submitting it again. If no compatible moving-video provider is configured or a provider fails, production stops with a clear error. It is never silently reported as a completed slideshow or simulated video.
 
 ## Scene Repair Studio and narration
 

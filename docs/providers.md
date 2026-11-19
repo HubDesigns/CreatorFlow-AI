@@ -26,10 +26,11 @@ Anthropic Claude is available through OpenRouter (`anthropic/claude-fable-5.1`).
 
 ## Video
 
-Local slideshow rendering is the default, so you never pay for video unless you choose a provider in **Channel setup** and set a paid-seconds cap. If a provider fails, the video falls back to the local slideshow.
+Automatic AI-video routing is available for production. For a no-subscription setup, select the local LTX-Video Q8 provider explicitly; it runs on your own NVIDIA GPU and does not call a paid video API. If it is selected but not installed, production stops with an actionable error and does not fall back to a cloud provider. Cloud providers remain optional. Local slideshow rendering remains available only when selected explicitly.
 
 | Provider | Default model | Best fit | Clip limits | Env var |
 | --- | --- | --- | --- | --- |
+| Lightricks (local) | `LTX-Video 2B Q8` | Free local moving footage on an 8 GB NVIDIA GPU; requires a separate Python/CUDA runtime | Up to 5 seconds per clip in CreatorFlow | `LTX_VIDEO_HOME`, `LTX_CHECKPOINT_DIR`, `LTX_UNET_PATH` |
 | ByteDance | `bytedance/seedance-2.5` through Replicate | Cinematic long scenes and large reference sets | 4–30 seconds | `REPLICATE_API_TOKEN` |
 | MiniMax | `MiniMax-H3` | Multimodal references, native stereo audio, optional 2K | 4–15 seconds | `MINIMAX_API_KEY` |
 | Google | `gemini-omni-1.1-flash` | Fast generation and conversational editing | 3–10 seconds | `GEMINI_API_KEY` |
@@ -50,8 +51,9 @@ GEMINI_API_KEY=...
 # ELEVENLABS_API_KEY=...
 # ELEVENLABS_VOICE_ID=...
 # OPENAI_API_KEY=sk-...
-# VIDEO_PROVIDER=slideshow   # auto, seedance, minimax_h3, google_omni, kling, wan
-# VIDEO_MAX_GENERATED_SECONDS=60
+VIDEO_PROVIDER=local_ltx     # local_ltx, auto, slideshow, seedance, minimax_h3, google_omni, kling, wan
+VIDEO_ALLOW_PAID_PROVIDERS=false  # automatic routing stays local unless explicitly enabled
+# VIDEO_MAX_GENERATED_SECONDS=20
 
 # App
 PORT=3456
@@ -61,7 +63,7 @@ CHANNEL_NAME=Your Channel Name
 DEFAULT_PRIVACY_STATUS=private
 ```
 
-The dashboard listens on `127.0.0.1` by default. If you set `HOST=0.0.0.0` to reach it from other devices, also set `API_KEY`, which every request that changes something must then send in the `x-api-key` header.
+For Windows installation instructions, hardware notes, and the local model setup, see [Free local LTX-Video Q8](local-ltx-video.md). The dashboard listens on `127.0.0.1` by default. If you set `HOST=0.0.0.0` to reach it from other devices, also set `API_KEY`, which every request that changes something must then send in the `x-api-key` header.
 
 ## Adding a provider
 

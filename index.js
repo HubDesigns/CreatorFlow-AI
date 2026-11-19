@@ -28,6 +28,7 @@ const { GrowthExperimentService } = require('./utils/growth-experiment-service')
 const { AITextService } = require('./utils/ai-text-service');
 const { DiscoverabilityService } = require('./utils/discoverability-service');
 const { version } = require('./package.json');
+const { VideoProviderRegistry, getVideoProviderReadiness } = require('./utils/video-providers');
 const chalk = require('chalk');
 
 function isLoopbackHost(host) {
@@ -128,7 +129,7 @@ class YouTubeAutomationAgent {
 
       // Show which pipeline stages will run for real vs. be simulated
       const capabilities = await this.logCapabilitySummary();
-      if (capabilities.hasText && capabilities.hasFFmpeg && capabilities.hasUpload) {
+      if (capabilities.hasText && capabilities.hasVideoProvider && capabilities.hasFFmpeg && capabilities.hasUpload) {
         await this.activation.markSetupReady(capabilities);
       }
       
@@ -176,6 +177,11 @@ class YouTubeAutomationAgent {
     }
   }
 
+  getVideoProviderReadiness() {
+    const credentials = this.credentials?.credentials || {};
+    return getVideoProviderReadiness(new VideoProviderRegistry(credentials));
+  }
+
   async logCapabilitySummary() {
     const { checkFFmpeg, ffmpegInstallHint } = require('./utils/ffmpeg');
     const creds = this.credentials.credentials || {};
@@ -190,12 +196,15 @@ class YouTubeAutomationAgent {
       hasGemini
     );
     const hasFFmpeg = await checkFFmpeg();
+    const videoReadiness = this.getVideoProviderReadiness();
+    const hasVideoProvider = videoReadiness.ready;
     const hasUpload = Boolean(creds.youtube && this.credentials.tokens?.youtube);
 
     const capabilities = [
       { name: 'Script & strategy generation', ok: hasText, hint: 'configure an AI provider (npm run credentials:setup)' },
       { name: 'Image generation (visuals/thumbnails)', ok: hasImages, hint: 'requires an OpenAI or Gemini API key — otherwise gradient slides are used' },
       { name: 'Voice narration (TTS)', ok: hasTTS, hint: 'configure OpenAI, Gemini, ElevenLabs, or Azure Speech — otherwise videos are silent' },
+      { name: 'AI moving-video generation', ok: hasVideoProvider, hint: hasVideoProvider ? '' : 'Configure at least one provider: Seedance (Replicate), MiniMax, Gemini video, Kling, or Wan (DashScope). See /api/video-providers for exact setup guidance.' },
       { name: 'Video assembly (FFmpeg)', ok: hasFFmpeg, hint: ffmpegInstallHint() },
       { name: 'YouTube upload', ok: hasUpload, hint: 'run: npm run credentials:setup' }
     ];
@@ -213,7 +222,7 @@ class YouTubeAutomationAgent {
       this.logger.warn('FFmpeg is missing: no .mp4 files can be produced until it is installed.');
     }
     console.log('');
-    return { hasText, hasImages, hasTTS, hasFFmpeg, hasUpload };
+    return { hasText, hasImages, hasTTS, hasVideoProvider, hasFFmpeg, hasUpload };
   }
 
   requireAPIKey() {
@@ -389,6 +398,11 @@ class YouTubeAutomationAgent {
       res.sendFile(path.join(__dirname, 'dashboard', 'index.html'));
     });
     
+    // Read-only AI video provider diagnostics; this route never calls provider APIs.
+    this.app.get('/api/video-providers', (req, res) => {
+      res.json(this.getVideoProviderReadiness());
+    });
+
     // Health check
     this.app.get('/health', (req, res) => {
       res.json({

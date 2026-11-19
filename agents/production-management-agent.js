@@ -335,9 +335,8 @@ class ProductionManagementAgent {
       
       return visualAssets;
     } catch (error) {
-      this.logger.error('AI video content generation failed:', error);
-      // Fallback to placeholder
-      return await this.createVideoElements(productionData);
+      this.logger.error('Real visual asset generation failed; production cannot continue with placeholder slides:', error);
+      throw error;
     }
   }
 
@@ -584,8 +583,9 @@ class ProductionManagementAgent {
       const finalVideoPath = path.join(__dirname, '..', 'data', 'videos', `${productionData.id}_final.mp4`);
       const narrationReady = await this.aiVideoGenerator.isUsableAudioFile(productionData.assets.audio?.path);
       if (!narrationReady && productionData.assets.audio?.intentionalSilence !== true) {
-        this.logger.warn('Final assembly is blocked until narration succeeds or the operator explicitly confirms an intentional silent video.');
-        return await this.simulateVideoAssembly(productionData, 'Narration is missing');
+        const error = new Error('Final video assembly requires a valid narration track or an explicit intentional-silence confirmation.');
+        error.code = 'NARRATION_REQUIRED';
+        throw error;
       }
 
       // Use AI Video Generator to create the final video
@@ -601,9 +601,10 @@ class ProductionManagementAgent {
         }
       );
 
-      // The generator falls back to a placeholder .info file when it cannot render
       if (!producedPath || path.extname(producedPath).toLowerCase() !== '.mp4') {
-        return await this.simulateVideoAssembly(productionData);
+        const error = new Error('Video renderer did not return a real MP4 file. Placeholder output is not accepted as a completed production.');
+        error.code = 'VIDEO_RENDER_INVALID';
+        throw error;
       }
 
       // Get file stats
@@ -626,9 +627,8 @@ class ProductionManagementAgent {
       this.logger.info('AI video assembly complete');
       return finalVideoPath;
     } catch (error) {
-      this.logger.error('AI video assembly failed:', error);
-      // Fallback to simulation
-      return await this.simulateVideoAssembly(productionData);
+      this.logger.error('AI video assembly failed; marking production as failed instead of creating a simulated substitute:', error);
+      throw error;
     }
   }
 
