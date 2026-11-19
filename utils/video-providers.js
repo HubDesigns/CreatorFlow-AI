@@ -625,12 +625,18 @@ function getVideoProviderReadiness(registry) {
       setupHint: PROVIDER_SETUP_HINTS[provider.id] || 'Configure this provider in Settings.'
     }));
   const configuredCount = providers.filter(provider => provider.credentialsConfigured).length;
+  const localReady = providers.some(provider => provider.id === 'local_ltx' && provider.credentialsConfigured);
+  const paidCloudConfiguredCount = providers.filter(provider => provider.id !== 'local_ltx' && provider.credentialsConfigured).length;
+  const paidCloudAllowed = registry?.allowCloudProviders === true;
   return {
-    ready: configuredCount > 0,
+    ready: localReady || (paidCloudAllowed && paidCloudConfiguredCount > 0),
+    localReady,
+    paidCloudAllowed,
+    paidCloudConfiguredCount,
     configuredCount,
     providerCount: providers.length,
     providers,
-    note: 'Local provider readiness checks installation paths only; successful inference still depends on compatible Python, PyTorch, CUDA toolkit, Q8 kernels, GPU memory, and model files. Cloud provider credential presence does not verify billing, quota, or live API access.'
+    note: 'Ready means the free local LTX installation paths are present, unless paid cloud providers were explicitly enabled. Local path checks do not validate Python, PyTorch, CUDA, Q8 kernels, GPU memory, or successful inference. Cloud credential presence does not verify billing, quota, or live API access.'
   };
 }
 
