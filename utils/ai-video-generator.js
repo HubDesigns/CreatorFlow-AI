@@ -422,7 +422,7 @@ class AIVideoGenerator {
       });
 
       // Slideshow is supported only when the operator explicitly selected it.
-      if (generated.actualProvider === 'slideshow' && generated.settings?.mode === 'slideshow') {
+      if (generated.actualProvider === 'slideshow') {
         const produced = await this.generateSlideshowVideo(script, visualAssets, audioPath, outputPath);
         this.lastVideoResult = {
           requestedProvider: generated.requestedProvider, actualProvider: 'slideshow',
