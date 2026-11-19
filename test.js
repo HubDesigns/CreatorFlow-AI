@@ -1064,7 +1064,8 @@ class SystemTest {
         capabilities: { minDuration: 4, maxDuration: 30, cancellation: true }
       });
       fake.isAvailable = () => true;
-      fake.createTask = async () => {
+      fake.createTask = async input => {
+        if (!input.outputPath) throw new Error('Media service did not pass the local output path to the provider');
         createCalls++;
         return { externalTaskId: 'prediction-1', status: 'queued' };
       };
