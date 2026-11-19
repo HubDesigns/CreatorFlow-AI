@@ -1128,6 +1128,17 @@ class SystemTest {
         throw new Error('Automatic routing must not use a paid cloud provider without explicit opt-in');
       }
 
+
+      let explicitPaidProviderBlocked = false;
+      try {
+        new VideoProviderRegistry({}, { providers: { seedance: fake } }).select('seedance');
+      } catch (error) {
+        explicitPaidProviderBlocked = error.code === 'PAID_VIDEO_PROVIDER_DISABLED';
+      }
+      if (!explicitPaidProviderBlocked) {
+        throw new Error('Explicit cloud video providers must remain disabled unless the user opts in');
+      }
+
       let localProviderUnavailableBlocked = false;
       try {
         new VideoProviderRegistry({}).select('local_ltx');
