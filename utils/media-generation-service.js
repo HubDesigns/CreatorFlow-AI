@@ -213,7 +213,7 @@ class MediaGenerationService {
 
   providerData(remote = {}) {
     return {
-      outputUrl: remote.outputUrl || null,
+      outputUrl: remote.localRunDir ? null : (remote.outputUrl || null),
       taskType: remote.taskType || null,
       model: remote.model || null
     };
