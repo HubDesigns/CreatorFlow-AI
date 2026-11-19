@@ -1097,6 +1097,21 @@ class SystemTest {
         throw new Error('Provider task identity and model evidence did not persist');
       }
       const providers = registry.list();
+      const { getVideoProviderReadiness } = require('./utils/video-providers');
+      const readiness = getVideoProviderReadiness(registry);
+      if (!readiness.ready || readiness.configuredCount !== 1 || readiness.providerCount !== 5) {
+        throw new Error('Readiness must report configured AI providers and exclude slideshow');
+      }
+      if (!readiness.providers.find(provider => provider.id === 'seedance')?.credentialsConfigured) {
+        throw new Error('Configured provider status was not reported');
+      }
+      const emptyReadiness = getVideoProviderReadiness(new VideoProviderRegistry({}));
+      if (emptyReadiness.ready || emptyReadiness.configuredCount !== 0 || emptyReadiness.providers.some(provider => provider.id === 'slideshow')) {
+        throw new Error('An unconfigured system must not report slideshow as AI video readiness');
+      }
+      if (!emptyReadiness.providers.find(provider => provider.id === 'kling')?.setupHint.includes('KLING_SECRET_KEY')) {
+        throw new Error('Provider setup guidance is missing the required Kling secret key');
+      }
       for (const id of ['seedance', 'minimax_h3', 'google_omni', 'kling', 'wan', 'slideshow']) {
         if (!providers.find(provider => provider.id === id)) throw new Error(`Missing video provider: ${id}`);
       }
