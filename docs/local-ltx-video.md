@@ -4,7 +4,7 @@ CreatorFlow can generate real moving MP4 clips locally with the community LTX-Vi
 
 ## Hardware and limitations
 
-The Q8 project reports a 2B-parameter, 8-bit LTX model running at 720 × 480 with 121 frames on an RTX 4060 Laptop GPU with 8 GB VRAM. This is a project-reported benchmark, not a guarantee. Laptop power limits, cooling, drivers, and other GPU workloads affect speed. CreatorFlow uses a conservative 704 × 480 profile, at most 121 frames per clip, and a low-VRAM inference flag.
+The Q8 project reports a 2B-parameter, 8-bit LTX model running at 720 × 480 with 121 frames on an RTX 4060 Laptop GPU with 8 GB VRAM. This is a project-reported benchmark, not a guarantee. Your GPU's reported 35 W power limit is below many high-performance laptop configurations, so expect generation to take longer than the published benchmark. Laptop power limits, cooling, drivers, and other GPU workloads affect speed. CreatorFlow uses a conservative 704 × 480 profile, at most 121 frames per clip, and a low-VRAM inference flag.
 
 The model creates silent video clips. CreatorFlow adds narration, captions, music, transitions, and final assembly separately. For a laptop GPU, begin with a small generated-clip budget rather than trying to synthesize every second of a long video.
 
@@ -36,9 +36,10 @@ py -3.10 -m venv "$env:USERPROFILE\CreatorFlow-LTX-venv"
 python -m pip install --upgrade pip setuptools wheel ninja
 ```
 
-3. Install the CUDA-enabled PyTorch build and Q8 kernels:
+3. Create the model workspace, then install the CUDA-enabled PyTorch build and Q8 kernels:
 
 ```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\\CreatorFlow-LTX" | Out-Null
 python -m pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu126
 git clone https://github.com/KONAKONA666/q8_kernels "$env:USERPROFILE\CreatorFlow-LTX\q8_kernels"
 Set-Location "$env:USERPROFILE\CreatorFlow-LTX\q8_kernels"
