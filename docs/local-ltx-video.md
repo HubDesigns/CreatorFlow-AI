@@ -75,6 +75,7 @@ Add these entries to your local `.env` file. Keep the paths exactly as installed
 ```env
 VIDEO_PROVIDER=local_ltx
 VIDEO_PROVIDER_ORDER=local_ltx
+VIDEO_ALLOW_PAID_PROVIDERS=false
 VIDEO_CLIP_DURATION=5
 VIDEO_MAX_GENERATED_SECONDS=20
 LTX_PYTHON=C:\Users\YOUR_WINDOWS_USER\CreatorFlow-LTX-venv\Scripts\python.exe
