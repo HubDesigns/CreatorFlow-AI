@@ -23,7 +23,7 @@ It researches topics, writes scripts, generates narration and visuals, assembles
 - **Real output only.** Simulated or placeholder media is clearly marked and can never be approved or uploaded.
 - **Self-hosted.** Your keys, media, and channel data stay on your machine.
 - **Learns from evidence, with your sign-off.** Lessons from analytics, retention curves, and comments shape future videos only after you approve them.
-- **Your choice of providers.** Eight text providers or OpenRouter, five cloud AI video providers, a free local LTX-Video Q8 option, and an explicit local slideshow mode.
+- **Your choice of providers.** Eight text providers or OpenRouter, five optional cloud AI video providers, a free local LTX-Video Q8 option, and an explicit local slideshow mode. Automatic routing does not use paid cloud video APIs unless you opt in.
 
 ## Quick start
 
