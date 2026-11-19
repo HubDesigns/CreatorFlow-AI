@@ -432,16 +432,24 @@ class VideoProviderRegistry {
   get(id) { return this.providers.get(id); }
   list() { return Array.from(this.providers.values()).map(provider => provider.describe()); }
 
-  select(requested = 'slideshow', order = DEFAULT_PROVIDER_ORDER, request = {}) {
+  select(requested = 'auto', order = DEFAULT_PROVIDER_ORDER, request = {}) {
     if (requested && requested !== 'auto') {
       const provider = this.get(requested);
-      return provider?.isAvailable() ? provider : this.get('slideshow');
+      if (provider?.isAvailable()) return provider;
+      const error = new Error(`The selected video provider "${requested}" is not configured or available. Configure its credentials in Settings, or select Auto to use another available video provider.`);
+      error.code = 'VIDEO_PROVIDER_UNAVAILABLE';
+      throw error;
     }
+
     for (const id of order) {
+      if (id === 'slideshow') continue;
       const provider = this.get(id);
       if (provider?.isAvailable() && provider.supports(request)) return provider;
     }
-    return this.get('slideshow');
+
+    const error = new Error('No AI video provider is configured and compatible with this request. Configure a video provider in Settings. Slideshow is available only when selected explicitly.');
+    error.code = 'VIDEO_PROVIDER_UNAVAILABLE';
+    throw error;
   }
 }
 
