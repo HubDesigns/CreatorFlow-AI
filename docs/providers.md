@@ -26,7 +26,7 @@ Anthropic Claude is available through OpenRouter (`anthropic/claude-fable-5.1`).
 
 ## Video
 
-Local slideshow rendering is the default, so you never pay for video unless you choose a provider in **Channel setup** and set a paid-seconds cap. If a provider fails, the video falls back to the local slideshow.
+Automatic AI-video routing is the default for production. Configure at least one supported video provider and set a paid-seconds cap in **Channel setup**. If no compatible provider is available or generation fails, production stops with an actionable error instead of silently becoming a slideshow or simulated video. Local slideshow rendering remains available only when selected explicitly.
 
 | Provider | Default model | Best fit | Clip limits | Env var |
 | --- | --- | --- | --- | --- |
@@ -50,7 +50,7 @@ GEMINI_API_KEY=...
 # ELEVENLABS_API_KEY=...
 # ELEVENLABS_VOICE_ID=...
 # OPENAI_API_KEY=sk-...
-# VIDEO_PROVIDER=slideshow   # auto, seedance, minimax_h3, google_omni, kling, wan
+VIDEO_PROVIDER=auto           # auto, slideshow, seedance, minimax_h3, google_omni, kling, wan
 # VIDEO_MAX_GENERATED_SECONDS=60
 
 # App
