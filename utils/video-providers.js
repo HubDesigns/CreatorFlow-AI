@@ -564,6 +564,7 @@ class SlideshowProvider extends VideoProvider {
 class VideoProviderRegistry {
   constructor(credentials = {}, options = {}) {
     const injected = options.providers || {};
+    this.allowCloudProviders = options.allowCloudProviders ?? process.env.VIDEO_ALLOW_PAID_PROVIDERS === 'true';
     this.providers = new Map([
       ['local_ltx', injected.local_ltx || new LocalLTXProvider(credentials, options.local_ltx)],
       ['seedance', injected.seedance || new SeedanceProvider(credentials, options.seedance)],
@@ -589,11 +590,12 @@ class VideoProviderRegistry {
 
     for (const id of order) {
       if (id === 'slideshow') continue;
+      if (id !== 'local_ltx' && !this.allowCloudProviders) continue;
       const provider = this.get(id);
       if (provider?.isAvailable() && provider.supports(request)) return provider;
     }
 
-    const error = new Error('No AI video provider is configured and compatible with this request. Configure a video provider in Settings. Slideshow is available only when selected explicitly.');
+    const error = new Error('No compatible free local AI video provider is installed. Install Local LTX-Video, or explicitly opt in to paid cloud video providers with VIDEO_ALLOW_PAID_PROVIDERS=true. Slideshow is available only when selected explicitly.');
     error.code = 'VIDEO_PROVIDER_UNAVAILABLE';
     throw error;
   }
