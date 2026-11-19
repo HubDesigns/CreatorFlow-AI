@@ -502,6 +502,7 @@ class LocalLTXProvider extends VideoProvider {
           stdio: ['ignore', 'pipe', 'pipe']
         });
         let settled = false;
+        let timer = null;
         const finish = (error) => {
           if (settled) return;
           settled = true;
@@ -509,7 +510,7 @@ class LocalLTXProvider extends VideoProvider {
           if (error) reject(error);
           else resolve();
         };
-        const timer = setTimeout(() => {
+        timer = setTimeout(() => {
           child.kill();
           finish(new Error('Local LTX generation exceeded ' + Math.round(this.timeoutMs / 60000) + ' minutes and was stopped'));
         }, this.timeoutMs);
