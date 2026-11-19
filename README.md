@@ -23,7 +23,7 @@ It researches topics, writes scripts, generates narration and visuals, assembles
 - **Real output only.** Simulated or placeholder media is clearly marked and can never be approved or uploaded.
 - **Self-hosted.** Your keys, media, and channel data stay on your machine.
 - **Learns from evidence, with your sign-off.** Lessons from analytics, retention curves, and comments shape future videos only after you approve them.
-- **Your choice of providers.** Eight text providers or OpenRouter, five AI video providers, or free local slideshow rendering.
+- **Your choice of providers.** Eight text providers or OpenRouter, five AI video providers, plus an explicit local slideshow mode.
 
 ## Quick start
 
@@ -79,7 +79,7 @@ Each item links to its walkthrough in the [feature guide](docs/features.md).
 **Produce**
 - [Production readiness](docs/features.md#production-readiness): a verified check of every provider, your channel, and video assembly before anything runs on its own. Paid image and video probes are separate opt-ins.
 - [Resumable generation](docs/features.md#resumable-generation): every stage is checkpointed, so a crash or timeout resumes where it stopped instead of starting over.
-- [AI video generation](docs/features.md#ai-video-generation): local slideshow by default; Seedance, MiniMax H3, Gemini Omni, Kling, or Wan for real clips, with a cap on paid seconds.
+- [AI video generation](docs/features.md#ai-video-generation): automatic AI-generated moving footage by default, hybrid assembly with real images, and an explicit local slideshow option.
 - [Shorts Repurposing Studio](docs/features.md#shorts-repurposing-studio): turn an approved video into three 9:16 Short drafts with burned-in captions, reusing existing media so no new generation credits are spent.
 
 **Review**
@@ -102,7 +102,7 @@ One key gets you started. Pick a text provider in the walkthrough: Gemini, OpenA
 
 - **Narration** comes from ElevenLabs, OpenAI, or Gemini, in that order of preference. A video without working narration can't be approved.
 - **Images** come from OpenAI or Gemini, each falling back to the other.
-- **Video** is a free local slideshow by default. Choose Seedance, MiniMax H3, Gemini Omni, Kling, or Wan for generated clips and set a cap on paid seconds; if a provider fails, the video falls back to the slideshow.
+- **Video** uses an available AI-video provider by default. Configure Seedance, MiniMax H3, Gemini Omni, Kling, or Wan and set a cap on paid seconds. Provider failures stop production with a clear error; slideshow mode must be selected explicitly.
 
 Models, keys, env vars, clip limits, and the `.env` essentials are in the [providers guide](docs/providers.md).
 
