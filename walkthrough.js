@@ -375,7 +375,7 @@ class SetupWalkthrough {
   async stepVideoProvider() {
     this.header(3, 'Video generation provider');
     console.log(chalk.white('Long-form videos use hybrid assembly: selected AI clips plus local FFmpeg rendering.'));
-    console.log(chalk.white('Local slideshow stays available and is the default so setup never spends credits unexpectedly.'));
+    console.log(chalk.white('AI-generated moving footage is the production default; configure a provider and paid-seconds cap before generation.'));
     const { providerId } = await inquirer.prompt([{
       type: 'list',
       name: 'providerId',
@@ -398,8 +398,8 @@ class SetupWalkthrough {
         { type: 'password', name: 'secret', mask: '*', message: `Paste your ${guide.secretName}:`, when: current => Boolean(guide.secretName && current.key) }
       ]);
       if (!answers.key?.trim()) {
-        console.log(chalk.yellow('  Skipped — local slideshow remains selected.'));
-        await db.setSetting('video_provider', 'slideshow');
+        console.log(chalk.yellow('  Skipped — automatic routing remains selected. Configure a supported video provider before generating production videos.'));
+        await db.setSetting('video_provider', 'auto');
         return;
       }
       guide.save(this.cm.credentials, answers.key.trim(), answers.secret?.trim());
