@@ -1106,8 +1106,39 @@ class SystemTest {
       if (routed.select('auto', ['wan', 'seedance'], { duration: 20 }).id !== 'seedance') {
         throw new Error('Automatic video routing ignored the requested duration capability');
       }
-      if (routed.select('auto', ['seedance', 'wan'], { duration: 8, generateAudio: true }).id !== 'slideshow') {
-        throw new Error('Automatic video routing selected a provider without requested native audio support');
+      let unavailableProviderBlocked = false;
+      try {
+        routed.select('auto', ['seedance', 'wan'], { duration: 8, generateAudio: true });
+      } catch (error) {
+        unavailableProviderBlocked = error.code === 'VIDEO_PROVIDER_UNAVAILABLE';
+      }
+      if (!unavailableProviderBlocked) {
+        throw new Error('Automatic video routing silently selected slideshow when no compatible moving-video provider was available');
+      }
+      if (routed.select('slideshow', [], {}).id !== 'slideshow') {
+        throw new Error('Explicit slideshow selection should remain available');
+      }
+
+      const { AIVideoGenerator } = require('./utils/ai-video-generator');
+      const failClosedGenerator = new AIVideoGenerator({}, {
+        mediaGeneration: { generateClips: async () => { throw new Error('simulated provider outage'); } }
+      });
+      let slideshowFallbackCalls = 0;
+      failClosedGenerator.generateSlideshowVideo = async () => {
+        slideshowFallbackCalls++;
+        return path.join(directory, 'unexpected-slideshow.mp4');
+      };
+      let providerFailureSurfaced = false;
+      try {
+        await failClosedGenerator.generateVideo(
+          { title: 'Provider failure regression' }, [], null, path.join(directory, 'must-not-render.mp4'),
+          { productionId: 'prod-fail-closed' }
+        );
+      } catch (error) {
+        providerFailureSurfaced = /simulated provider outage/.test(error.message);
+      }
+      if (!providerFailureSurfaced || slideshowFallbackCalls !== 0) {
+        throw new Error('A failed AI video provider was hidden by a slideshow fallback');
       }
       const listedJob = (await db.listGenerationJobs(10)).find(item => item.id === job.id);
       if (listedJob?.mediaTasks?.length !== 1 || listedJob.mediaTasks[0].external_task_id !== 'prediction-1') {
@@ -3099,6 +3130,15 @@ class SystemTest {
       const none = new AIVideoGenerator({});
       if (none.gemini || none.openai) {
         throw new Error('Media services initialized without any credentials');
+      }
+      let missingImageProviderBlocked = false;
+      try {
+        await none.generateVisualAssets('A real production image', 'cinematic', 1);
+      } catch (error) {
+        missingImageProviderBlocked = error.code === 'IMAGE_PROVIDER_UNAVAILABLE';
+      }
+      if (!missingImageProviderBlocked) {
+        throw new Error('Missing image credentials silently produced simulated placeholder artwork');
       }
     } finally {
       for (const key of envKeys) {
