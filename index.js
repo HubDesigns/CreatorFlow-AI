@@ -129,7 +129,7 @@ class YouTubeAutomationAgent {
 
       // Show which pipeline stages will run for real vs. be simulated
       const capabilities = await this.logCapabilitySummary();
-      if (capabilities.hasText && capabilities.hasFFmpeg && capabilities.hasUpload) {
+      if (capabilities.hasText && capabilities.hasVideoProvider && capabilities.hasFFmpeg && capabilities.hasUpload) {
         await this.activation.markSetupReady(capabilities);
       }
       
