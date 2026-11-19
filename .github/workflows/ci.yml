@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - master
+      - feature/three-daily-publishing
   pull_request:
     branches:
       - main
