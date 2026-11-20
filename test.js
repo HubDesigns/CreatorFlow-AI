@@ -1110,10 +1110,10 @@ class SystemTest {
           child.kill = () => {};
           const outputIndex = args.indexOf('-OutputPath');
           const wavPath = args[outputIndex + 1];
-          setImmediate(() => {
+          setTimeout(() => {
             fsSync.writeFileSync(wavPath, Buffer.alloc(2048, 1));
             child.emit('close', 0);
-          });
+          }, 0);
           return child;
         },
         runFFmpeg: async args => {
