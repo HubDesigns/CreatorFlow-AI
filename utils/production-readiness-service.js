@@ -292,7 +292,7 @@ class ProductionReadinessService {
       text_provider: 'Run npm run walkthrough, verify the selected model, and confirm provider credits or quota.',
       image_provider: 'Verify paid image access or rely on the built-in gradient visual fallback.',
       video_provider: 'Add licensed video clips to data/footage, configure PIXABAY_API_KEY, install optional local LTX, or explicitly enable a paid cloud provider.',
-      voice_narration: 'Configure OpenAI, Gemini TTS, ElevenLabs with a voice ID, or Azure Speech, then rerun.',
+      voice_narration: 'Use the built-in Windows/macOS speech engine or install eSpeak on Linux. For cloud narration, explicitly select TTS_PROVIDER and configure that provider.',
       video_assembly: 'Run npm install to restore ffmpeg-static, or configure FFMPEG_PATH to a working binary.',
       youtube_access: 'Reconnect YouTube in npm run walkthrough and ensure the Google account owns a channel.',
       upload_metadata: 'Edit the queued title, description, category, language, and tags before publishing.'
