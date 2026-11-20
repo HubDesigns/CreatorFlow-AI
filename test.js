@@ -1190,6 +1190,7 @@ class SystemTest {
 
       const empty = new FootageFirstProvider({
         directory: path.join(directory, 'empty'),
+        apiKey: '',
         hardwareProfile: { profile: 'integrated' }
       });
       let noMatch = false;
@@ -1267,7 +1268,7 @@ class SystemTest {
       GoogleOmniProvider, KlingProvider, WanProvider, LocalLTXProvider, FootageFirstProvider
     } = require('./utils/video-providers');
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'yaa-media-provider-'));
-    const unavailableFootage = new FootageFirstProvider({ directory: path.join(directory, 'no-footage') });
+    const unavailableFootage = new FootageFirstProvider({ directory: path.join(directory, 'no-footage'), apiKey: '' });
     const unavailableLocalLtx = new LocalLTXProvider({}, {
       home: path.join(directory, 'missing-ltx'),
       checkpointDir: path.join(directory, 'missing-base'),
