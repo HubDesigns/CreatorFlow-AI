@@ -72,7 +72,7 @@ class ProductionReadinessService {
     try {
       checks.push(await this.executeCheck('text_provider', 'AI text provider', true, () => this.probeText()));
       checks.push(await this.executeCheck('image_provider', 'Image provider', false, () => this.probeImage(tempDir, Boolean(options.includePaidMedia))));
-      checks.push(await this.executeCheck('video_provider', 'AI video provider', true, () => this.probeVideoProvider(tempDir, Boolean(options.includePaidVideo))));
+      checks.push(await this.executeCheck('video_provider', 'Moving-footage provider', true, () => this.probeVideoProvider(tempDir, Boolean(options.includePaidVideo))));
       checks.push(await this.executeCheck('voice_narration', 'Voice narration', true, () => this.probeNarration(tempDir)));
       checks.push(await this.executeCheck('video_assembly', 'Audio/video assembly', true, () => this.probeVideoAssembly(tempDir)));
       checks.push(await this.executeCheck('youtube_access', 'YouTube channel access', true, () => this.probeYouTube()));
