@@ -53,7 +53,19 @@ These are output profiles, not guarantees of render speed. Available RAM, CPU ge
 
 Local LTX-Video remains a separate optional engine for supported NVIDIA/CUDA systems. It is not required by footage-first mode. A hardware profile can identify a possible candidate, but only a real model-runtime test can confirm compatibility. See [Local LTX setup](local-ltx-video.md).
 
-## 5. Privacy, cost, and fallback behavior
+## 5. Offline narration and optional music
+
+On Windows, CreatorFlow can use the built-in Windows System.Speech engine to create narration without an API key. It selects an installed male voice when one is available; otherwise it uses the operating-system default voice. macOS uses its built-in `say` command. Linux can use `espeak-ng` or `espeak` when installed.
+
+For optional background music, put a track you have permission to use in:
+
+```text
+data/music/
+```
+
+Supported formats are MP3, WAV, M4A, AAC, OGG, and FLAC. CreatorFlow selects the first alphabetically named track and mixes it quietly under narration. If the folder is empty, the video is rendered with narration only. Music is never downloaded from a paid service.
+
+## 6. Privacy, cost, and fallback behavior
 
 - Local-library rendering stays on the PC after the source files are present.
 - Pixabay search/download uses the configured Pixabay key and the user's internet connection.
