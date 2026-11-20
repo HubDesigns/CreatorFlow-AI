@@ -133,10 +133,23 @@ class FootageFirstProvider {
     const cached = await fs.readFile(cachePath, 'utf8').then(JSON.parse).catch(() => null);
     if (cached?.expiresAt > now && Array.isArray(cached.hits)) return cached.hits;
 
-    const response = await this.http.get('https://pixabay.com/api/videos/', {
-      params: { key: this.apiKey, q: query, per_page: 12, safesearch: 'true', order: 'popular' },
-      timeout: 20000
-    });
+    let response;
+    try {
+      response = await this.http.get('https://pixabay.com/api/videos/', {
+        params: { key: this.apiKey, q: query, per_page: 12, safesearch: 'true', order: 'popular' },
+        timeout: 20000
+      });
+    } catch (error) {
+      const status = Number(error?.response?.status) || null;
+      const message = status === 429
+        ? 'Pixabay rate limit reached; cached results will be reused after the provider limit resets.'
+        : status === 401 || status === 403
+          ? 'Pixabay rejected the configured API key. Check PIXABAY_API_KEY in your local .env file.'
+          : `Pixabay video search failed${status ? ` (HTTP ${status})` : ' because of a network error'}.`;
+      const safeError = new Error(message);
+      safeError.code = 'PIXABAY_SEARCH_FAILED';
+      throw safeError;
+    }
     const hits = Array.isArray(response.data?.hits) ? response.data.hits : [];
     await fs.mkdir(this.cacheDirectory, { recursive: true });
     await fs.writeFile(cachePath, JSON.stringify({ expiresAt: now + 24 * 60 * 60 * 1000, hits }, null, 2));
