@@ -453,8 +453,10 @@ class AIVideoGenerator {
         tasks: generated.clips.map(clip => ({ scene: clip.index, taskId: clip.taskId, provider: clip.provider, model: clip.model })),
         scenes: generated.clips.map(clip => ({
           index: clip.index, label: clip.label, prompt: clip.prompt, duration: clip.duration,
-          path: clip.path, taskId: clip.taskId, provider: clip.provider, model: clip.model
-        }))
+          path: clip.path, taskId: clip.taskId, provider: clip.provider, model: clip.model,
+          source: clip.source || null
+        })),
+        sources: generated.clips.map(clip => clip.source).filter(Boolean)
       };
       return produced;
     } catch (error) {
