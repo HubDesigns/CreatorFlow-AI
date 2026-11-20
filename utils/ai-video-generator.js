@@ -2,6 +2,7 @@ const OpenAI = require('openai');
 const Replicate = require('replicate');
 const fs = require('fs').promises;
 const path = require('path');
+const { spawn: nodeSpawn } = require('child_process');
 const axios = require('axios');
 const sharp = require('sharp');
 const { Logger } = require('./logger');
@@ -69,6 +70,9 @@ class AIVideoGenerator {
     this.getMediaDuration = options.getMediaDuration || getMediaDuration;
     this.lastVideoResult = null;
     this.lastNarrationResult = null;
+    this.spawn = options.spawn || nodeSpawn;
+    this.runFFmpeg = options.runFFmpeg || runFFmpeg;
+    this.platform = options.platform || process.platform;
     
     // Initialize AI services with graceful fallback
     const openaiKey = resolvedCredentials.openai?.apiKey || process.env.OPENAI_API_KEY;
@@ -134,7 +138,11 @@ class AIVideoGenerator {
         model = process.env.GEMINI_TTS_MODEL || 'gemini-3.8-flash-tts';
         generatedPath = await this.generateGeminiTTS(text, outputPath);
       } else {
-        generatedPath = await this.simulateTTSGeneration(text, outputPath);
+        provider = 'local_os';
+        model = this.platform === 'win32'
+          ? 'Windows System.Speech'
+          : this.platform === 'darwin' ? 'macOS say' : 'eSpeak';
+        generatedPath = await this.generateLocalTTSAudio(text, outputPath);
       }
 
       const usable = await this.isUsableAudioFile(generatedPath);
@@ -146,7 +154,7 @@ class AIVideoGenerator {
         externalTaskId: null,
         generatedAt: new Date().toISOString(),
         simulated: !usable,
-        cost: { provider, amount: null, currency: null, invoiceRequired: provider !== 'simulation' }
+        cost: { provider, amount: null, currency: null, invoiceRequired: !['simulation', 'local_os'].includes(provider) }
       };
       return generatedPath;
     } catch (error) {
@@ -243,6 +251,93 @@ class AIVideoGenerator {
 
     this.logger.info('Gemini TTS generation complete');
     return outputPath;
+  }
+
+  async runLocalCommand(command, args, timeoutMs = 600000) {
+    return new Promise((resolve, reject) => {
+      const child = this.spawn(command, args, {
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      let stdout = '';
+      let stderr = '';
+      let settled = false;
+      const finish = error => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (error) reject(error);
+        else resolve({ stdout, stderr });
+      };
+      const timer = setTimeout(() => {
+        child.kill();
+        finish(new Error('Local speech synthesis exceeded its time limit'));
+      }, timeoutMs);
+      child.stdout?.on('data', chunk => { stdout = (stdout + chunk.toString()).slice(-3000); });
+      child.stderr?.on('data', chunk => { stderr = (stderr + chunk.toString()).slice(-3000); });
+      child.once('error', error => finish(new Error(`Could not start local speech engine (${command}): ${error.message}`)));
+      child.once('close', code => {
+        if (code === 0) finish();
+        else finish(new Error(`Local speech engine exited with code ${code}. ${stderr || stdout || 'No diagnostic output.'}`));
+      });
+    });
+  }
+
+  async generateLocalTTSAudio(text, outputPath) {
+    const textPath = outputPath + '.local-tts.txt';
+    const wavPath = outputPath + '.local-tts.wav';
+    const scriptPath = outputPath + '.local-tts.ps1';
+    await fs.writeFile(textPath, String(text || ''), 'utf8');
+
+    try {
+      if (this.platform === 'win32') {
+        const script = [
+          'param([string]$OutputPath, [string]$TextPath)',
+          "$ErrorActionPreference = 'Stop'",
+          'Add-Type -AssemblyName System.Speech',
+          '$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer',
+          '$synth.Rate = 0',
+          '$synth.Volume = 100',
+          '$male = $synth.GetInstalledVoices() | Where-Object { $_.VoiceInfo.Gender -eq [System.Speech.Synthesis.VoiceGender]::Male } | Select-Object -First 1',
+          'if ($male) { $synth.SelectVoice($male.VoiceInfo.Name) }',
+          '$synth.SetOutputToWaveFile($OutputPath)',
+          '$speechText = [System.IO.File]::ReadAllText($TextPath, [System.Text.Encoding]::UTF8)',
+          '$synth.Speak($speechText)',
+          '$synth.Dispose()'
+        ].join('\n');
+        await fs.writeFile(scriptPath, script, 'utf8');
+        await this.runLocalCommand('powershell.exe', [
+          '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+          '-File', scriptPath, '-OutputPath', wavPath, '-TextPath', textPath
+        ]);
+      } else if (this.platform === 'darwin') {
+        await this.runLocalCommand('say', ['-o', wavPath, '--file-format=WAVE', '-f', textPath]);
+      } else {
+        try {
+          await this.runLocalCommand('espeak-ng', ['-f', textPath, '-w', wavPath]);
+        } catch (_error) {
+          await this.runLocalCommand('espeak', ['-f', textPath, '-w', wavPath]);
+        }
+      }
+
+      const wavStats = await fs.stat(wavPath).catch(() => null);
+      if (!wavStats?.isFile() || wavStats.size < 1000) {
+        throw new Error('The local speech engine did not produce a valid WAV narration file');
+      }
+      await this.runFFmpeg(['-y', '-i', wavPath, '-codec:a', 'libmp3lame', '-q:a', '4', outputPath]);
+      const outputStats = await fs.stat(outputPath).catch(() => null);
+      if (!outputStats?.isFile() || outputStats.size < 1000) {
+        throw new Error('FFmpeg did not produce a valid local narration file');
+      }
+      this.logger.info('Local operating-system speech synthesis complete');
+      return outputPath;
+    } finally {
+      await Promise.all([
+        fs.unlink(textPath).catch(() => {}),
+        fs.unlink(wavPath).catch(() => {}),
+        fs.unlink(scriptPath).catch(() => {})
+      ]);
+    }
   }
 
   async generateVisualAssets(prompt, style = "ethereal", count = 1) {
