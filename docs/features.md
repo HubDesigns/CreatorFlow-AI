@@ -46,11 +46,13 @@ Autonomous Operator runs preserve their research and editorial plan, so **Resume
 
 ## AI video generation
 
-Automatic AI-video routing is the default for production, so at least one supported video provider must be configured before generating a finished video. Local slideshow rendering remains available as an explicit mode and is rendered in headless Chromium (install it once with `npx playwright install chromium`) and assembled with FFmpeg.
+Hardware-adaptive footage-first routing is the standard production path. It does not require an NVIDIA GPU, CUDA, a diffusion model, or a paid video-generation API. CreatorFlow matches scene prompts against licensed videos in `data/footage`, optional topic-matched photos in `data/images`, and an optional background-music track in `data/music`. Windows and macOS can use their built-in speech engines for offline narration; Linux can use eSpeak when installed. FFmpeg renders the timeline with adaptive resolution, scene transitions, narration, and optional music.
 
-To generate real clips, choose a provider in **Channel setup**, set a paid-seconds cap, then run the separately opted-in paid video readiness probe. The supported providers and their clip limits are listed in [AI providers](providers.md#video).
+For online stock footage, configure `PIXABAY_API_KEY` in your local `.env` file. The Pixabay API is free but requires a key; search results are cached for 24 hours and source/creator metadata is retained for review. The local media folders work without an API key and can be used offline. See [footage-first setup](footage-first-video.md) for folder names, formats, and licensing guidance.
 
-Long-form productions use hybrid assembly: the agent generates bounded provider clips for the hook and important sections, then uses real generated still images to fill remaining timeline sections, mixes narration, and keeps captions alongside the production. As soon as a provider returns its task ID, the agent persists it before polling, so interrupted jobs can resume that known task instead of submitting it again. If no compatible moving-video provider is configured or a provider fails, production stops with a clear error. It is never silently reported as a completed slideshow or simulated video.
+Local LTX-Video Q8 remains an optional text-to-video engine for systems that pass its separate runtime and inference checks. Paid cloud video providers remain disabled unless the operator explicitly enables them. The supported AI providers and their clip limits are listed in [AI providers](providers.md#video). Local slideshow rendering remains available only when explicitly selected.
+
+For footage-first productions, the agent selects real moving clips for script scenes and uses matching local photos to fill remaining timeline sections. It persists each clip's source, creator, and provenance metadata, mixes narration with optional background music, and retains captions alongside the production. If no relevant clip can be found, production stops with a clear error instead of silently choosing unrelated footage, a paid provider, or a slideshow.
 
 ## Scene Repair Studio and narration
 
