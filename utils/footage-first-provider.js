@@ -147,7 +147,7 @@ class FootageFirstProvider {
     const videos = hit?.videos || {};
     const preference = profile?.profile === 'high_gpu'
       ? ['medium', 'small', 'tiny']
-      : profile?.profile === 'entry_gpu'
+      : ['entry_gpu', 'integrated_plus'].includes(profile?.profile)
         ? ['small', 'tiny', 'medium']
         : ['tiny', 'small'];
     for (const size of preference) {
