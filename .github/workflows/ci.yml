@@ -6,6 +6,7 @@ on:
       - main
       - master
       - feature/three-daily-publishing
+      - feature/hardware-adaptive-video-engine
   pull_request:
     branches:
       - main
