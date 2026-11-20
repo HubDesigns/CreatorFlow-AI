@@ -80,6 +80,7 @@ backup/
 
 # Cache
 .cache/
+data/cache/
 *.cache
 # Generated content outputs
 data/footage/
