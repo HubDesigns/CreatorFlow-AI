@@ -591,7 +591,9 @@ class VideoProviderRegistry {
       }
       const provider = this.get(requested);
       if (provider?.isAvailable()) return provider;
-      const error = new Error(`The selected video provider "${requested}" is not configured or available. Configure its credentials in Settings, or select Auto to use another available video provider.`);
+      const error = new Error(requested === 'footage_first'
+        ? 'Footage-first is selected but no local video files or Pixabay API key are available. Add licensed clips to data/footage or configure PIXABAY_API_KEY.'
+        : `The selected video provider "${requested}" is not configured or available. Configure its credentials in Settings, or select Auto to use another available video provider.`);
       error.code = 'VIDEO_PROVIDER_UNAVAILABLE';
       throw error;
     }
