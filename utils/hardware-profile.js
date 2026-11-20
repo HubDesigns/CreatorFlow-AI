@@ -48,7 +48,7 @@ function classifyHardware({ totalMemoryMb, gpus }) {
   const ramGb = totalMemoryMb / 1024;
   let profile = 'integrated';
   if (vram >= 7800 && ramGb >= 16) profile = 'high_gpu';
-  else if (vram >= 4 && ramGb >= 12) profile = 'entry_gpu';
+  else if (vram >= 3500 && ramGb >= 12) profile = 'entry_gpu';
   else if (ramGb >= 16) profile = 'integrated_plus';
   return {
     profile,
