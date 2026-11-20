@@ -35,6 +35,7 @@ class SystemTest {
       { name: 'Hardware-Adaptive Video Profiles', test: () => this.testHardwareAdaptiveProfiles() },
       { name: 'Local Footage-First Video Provider', test: () => this.testFootageFirstProvider() },
       { name: 'Offline Operating-System Narration', test: () => this.testOfflineOSNarration() },
+      { name: 'Adaptive Timeline, Transitions and Music Mix', test: () => this.testAdaptiveTimelineAndMusic() },
       { name: 'Scene Repair Studio', test: () => this.testSceneRepairStudio() },
       { name: 'Narration Reliability and Recovery', test: () => this.testNarrationReliability() },
       { name: 'Scene Rebuild with Real FFmpeg', test: () => this.testSceneRebuildRealFFmpeg() },
@@ -1036,6 +1037,58 @@ class SystemTest {
       await fs.rm(directory, { recursive: true, force: true });
     }
     this.logger.info('Production readiness gate test completed successfully');
+  }
+
+  async testAdaptiveTimelineAndMusic() {
+    const fs = require('fs').promises;
+    const os = require('os');
+    const { AIVideoGenerator } = require('./utils/ai-video-generator');
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'creatorflow-adaptive-render-'));
+    const musicDirectory = path.join(directory, 'music');
+    const narration = path.join(directory, 'narration.mp3');
+    const music = path.join(musicDirectory, 'background.mp3');
+    const visual = path.join(directory, 'visual.mp4');
+    const output = path.join(directory, 'final.mp4');
+    const calls = [];
+
+    try {
+      await fs.mkdir(musicDirectory, { recursive: true });
+      await fs.writeFile(narration, Buffer.alloc(2048, 1));
+      await fs.writeFile(music, Buffer.alloc(2048, 2));
+      const generator = new AIVideoGenerator({}, {
+        hardwareProfile: { profile: 'integrated_plus' },
+        musicDirectory,
+        runFFmpeg: async args => {
+          calls.push(args);
+          await fs.writeFile(args[args.length - 1], Buffer.alloc(2048, 3));
+        }
+      });
+
+      const selectedMusic = await generator.findBackgroundMusic();
+      if (selectedMusic !== music) throw new Error('The local music library did not return its available track');
+
+      await generator.renderMediaTimeline([
+        { type: 'video', path: path.join(directory, 'scene-1.mp4'), duration: 4 },
+        { type: 'video', path: path.join(directory, 'scene-2.mp4'), duration: 4 }
+      ], visual);
+      const renderArgs = calls[0];
+      const filter = renderArgs[renderArgs.indexOf('-filter_complex') + 1];
+      if (!filter.includes('scale=1280:720') || !filter.includes('xfade=transition=fade')) {
+        throw new Error('The integrated-graphics render must use adaptive 720p and real scene transitions');
+      }
+      if (!renderArgs.includes('ultrafast')) throw new Error('The standard render must use a CPU-friendly encoding preset');
+
+      await generator.addAudioToVideo(visual, narration, output, { musicPath: music });
+      const muxArgs = calls[1];
+      const mix = muxArgs[muxArgs.indexOf('-filter_complex') + 1];
+      if (!mix.includes('amix=inputs=2') || !mix.includes('volume=0.12')) {
+        throw new Error('Background music must be mixed quietly under narration');
+      }
+      if (!(await fs.stat(output)).size) throw new Error('The final narration/music mix was not produced');
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true });
+    }
+    this.logger.info('Adaptive timeline and music mix tests completed successfully');
   }
 
   async testOfflineOSNarration() {
