@@ -37,7 +37,6 @@ You need:
 git clone https://github.com/darkzOGx/youtube-automation-agent.git
 cd youtube-automation-agent
 npm install
-npx playwright install chromium   # renders slideshow videos; on Linux add --with-deps
 npm run walkthrough
 npm start
 ```
@@ -48,7 +47,7 @@ Then open `http://localhost:3456`.
 2. **Check readiness.** In the dashboard, open **Production readiness** and choose **Run verified check**. It makes small live text and narration requests, checks access to your channel, and builds and decodes a test MP4, without uploading anything.
 3. **Make videos.** Open **Autonomous operator**, describe the channel you want, and choose **Activate & run now**, or create a single video from the dashboard. Finished videos wait in **Pipeline** for your review and approval.
 
-FFmpeg is installed with `npm install` through `ffmpeg-static`.
+FFmpeg is installed with `npm install` through `ffmpeg-static`. Chromium is needed only if you explicitly select the legacy slideshow mode (`npx playwright install chromium`; on Linux add `--with-deps`).
 
 ### YouTube credentials
 
