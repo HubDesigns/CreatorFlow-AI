@@ -645,18 +645,22 @@ class ProductionManagementAgent {
       // Get file stats
       const stats = await fs.stat(finalVideoPath);
       
+      const videoResult = this.aiVideoGenerator.lastVideoResult || { actualProvider: 'unknown', model: null };
+      const footageFirst = videoResult.actualProvider === 'footage_first';
       productionData.assets.finalVideo = {
         path: finalVideoPath,
         fileSize: stats.size,
         duration: productionData.estimatedDuration,
-        generatedWith: 'AI',
-        resolution: '1920x1080',
+        generatedWith: footageFirst ? 'Licensed footage + local FFmpeg' : 'AI video provider',
+        resolution: footageFirst ? 'hardware-adaptive' : '1920x1080',
         format: 'mp4',
-        provider: this.aiVideoGenerator.lastVideoResult || { actualProvider: 'slideshow', model: 'local-ffmpeg' }
+        provider: videoResult,
+        sourceCredits: videoResult.sources || []
       };
+      productionData.assets.video.sourceCredits = videoResult.sources || [];
       productionData.containsSyntheticMedia = Boolean(
-        this.aiVideoGenerator.lastVideoResult?.actualProvider &&
-        !['slideshow', 'simulation'].includes(this.aiVideoGenerator.lastVideoResult.actualProvider)
+        videoResult.actualProvider &&
+        !['footage_first', 'slideshow', 'simulation'].includes(videoResult.actualProvider)
       );
       
       this.logger.info('AI video assembly complete');
