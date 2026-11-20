@@ -1251,6 +1251,14 @@ class SystemTest {
       throw new Error('A lower-tier dedicated GPU must not be treated as an LTX-ready device');
     }
 
+    const lowMemoryAdapter = classifyHardware({
+      totalMemoryMb: 32768,
+      gpus: [{ name: 'Low-memory adapter', vendor: 'AMD', dedicatedMemoryMb: 512 }]
+    });
+    if (lowMemoryAdapter.profile !== 'integrated_plus') {
+      throw new Error('A small reported adapter-memory value must not be mistaken for a 4 GB discrete GPU');
+    }
+
     const high = classifyHardware({
       totalMemoryMb: 32768,
       gpus: [{ name: 'NVIDIA RTX test', vendor: 'NVIDIA', dedicatedMemoryMb: 8188 }]
