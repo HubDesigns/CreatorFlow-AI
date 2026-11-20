@@ -51,13 +51,13 @@ The application records Pixabay's source page, creator, and selected quality in 
 
 The application detects CPU, RAM, and available GPU information. The footage renderer uses software H.264 encoding with the FFmpeg `ultrafast` preset, so the standard path does not depend on CUDA.
 
-The current output profile is conservative:
+The current hardware caps are conservative:
 
-- Integrated graphics / CPU-first: 960 × 540
-- Entry-level dedicated GPU: 1280 × 720
-- Higher-end dedicated GPU: 1920 × 1080
+- Integrated graphics / CPU-first: up to 960 × 540
+- Entry-level dedicated GPU or RAM-rich integrated graphics: up to 1280 × 720
+- Higher-end dedicated GPU: up to 1920 × 1080
 
-These are output profiles, not guarantees of render speed. Available RAM, CPU generation, cooling, disk speed, and source-footage size also affect performance.
+The selected resolution is honored when it fits the detected profile and capped when it does not. These are output caps, not guarantees of render speed. Available RAM, CPU generation, cooling, disk speed, and source-footage size also affect performance.
 
 ## 4. Optional local AI video
 
