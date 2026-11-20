@@ -52,7 +52,7 @@ class FootageFirstProvider {
     this.model = 'Local footage + FFmpeg';
     this.capabilities = {
       minDuration: 1, maxDuration: 120, defaultResolution: '720p',
-      text: true, firstFrame: false, nativeAudio: false, local: true,
+      text: true, firstFrame: true, nativeAudio: false, local: true,
       referenceImages: 0, referenceVideos: 0, referenceAudios: 0
     };
     this.directory = path.resolve(options.directory || process.env.FOOTAGE_LIBRARY_DIR || path.join(process.cwd(), 'data', 'footage'));
