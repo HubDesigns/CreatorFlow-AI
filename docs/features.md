@@ -22,7 +22,7 @@ Review Studio, mentioned throughout, is the **Content review** panel for each vi
 
 ## Production readiness
 
-Before activating autonomous production, open **Production readiness** in the dashboard and choose **Run verified check**. The gate makes small live text and narration requests, verifies access to the connected YouTube channel, creates and decodes a temporary MP4 containing audio and video, and validates every queued upload's metadata. It never creates or uploads a YouTube video, and temporary probe assets are deleted after the run.
+Before activating autonomous production, open **Production readiness** in the dashboard and choose **Run verified check**. The gate makes a small live text request, verifies narration using the selected local or cloud speech engine, checks access to the connected YouTube channel, creates and decodes a temporary MP4 containing audio and video, and validates every queued upload's metadata. It never creates or uploads a YouTube video, and temporary probe assets are deleted after the run.
 
 AI image generation can incur a larger provider charge, so its live probe is a separate opt-in checkbox. Without that checkbox, image configuration is reported as verified, skipped, or using the built-in gradient fallback without making a paid image request.
 
