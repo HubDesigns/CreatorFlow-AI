@@ -186,6 +186,13 @@ class ProductionReadinessService {
     if (configured.id === 'slideshow') {
       return { message: 'Local slideshow video generation is selected; no paid AI video provider is required.', details: { provider: 'slideshow' } };
     }
+    if (configured.id === 'footage_first') {
+      return {
+        status: 'skipped',
+        message: 'Footage-first local rendering is available. A stock-footage search/download is not run during readiness checks; a real production validates topic matching and MP4 rendering.',
+        details: { provider: 'footage_first', source: configured.source || 'local_library' }
+      };
+    }
     if (!includePaidVideo) {
       return {
         status: 'skipped',
@@ -282,7 +289,7 @@ class ProductionReadinessService {
     const messages = {
       text_provider: 'Run npm run walkthrough, verify the selected model, and confirm provider credits or quota.',
       image_provider: 'Verify paid image access or rely on the built-in gradient visual fallback.',
-      video_provider: 'Configure the selected provider credentials, choose local slideshow, or rerun with the paid video probe enabled.',
+      video_provider: 'Add licensed video clips to data/footage, configure PIXABAY_API_KEY, install optional local LTX, or explicitly enable a paid cloud provider.',
       voice_narration: 'Configure OpenAI, Gemini TTS, ElevenLabs with a voice ID, or Azure Speech, then rerun.',
       video_assembly: 'Run npm install to restore ffmpeg-static, or configure FFMPEG_PATH to a working binary.',
       youtube_access: 'Reconnect YouTube in npm run walkthrough and ensure the Google account owns a channel.',
