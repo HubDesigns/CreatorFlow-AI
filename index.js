@@ -29,6 +29,7 @@ const { AITextService } = require('./utils/ai-text-service');
 const { DiscoverabilityService } = require('./utils/discoverability-service');
 const { version } = require('./package.json');
 const { VideoProviderRegistry, getVideoProviderReadiness } = require('./utils/video-providers');
+const { detectHardwareProfile } = require('./utils/hardware-profile');
 const chalk = require('chalk');
 
 function isLoopbackHost(host) {
@@ -401,6 +402,24 @@ class YouTubeAutomationAgent {
     // Read-only AI video provider diagnostics; this route never calls provider APIs.
     this.app.get('/api/video-providers', (req, res) => {
       res.json(this.getVideoProviderReadiness());
+    });
+
+    // Read-only local hardware diagnostics. Detection is best-effort and never
+    // installs drivers, downloads models, or calls a paid/cloud provider.
+    this.app.get('/api/hardware-profile', async (_req, res) => {
+      try {
+        res.json(await detectHardwareProfile());
+      } catch (error) {
+        this.logger.warn(`Hardware detection was incomplete: ${error.message}`);
+        res.status(200).json({
+          platform: process.platform,
+          architecture: process.arch,
+          profile: 'unknown',
+          defaultVideoMode: 'footage_first',
+          localLtxCandidate: false,
+          warning: 'Hardware detection was incomplete; the safe footage-first profile remains selected.'
+        });
+      }
     });
 
     // Health check
