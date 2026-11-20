@@ -27,6 +27,7 @@ class ProductionManagementAgent {
       'data/production',
       'data/assets',
       'data/footage',
+      'data/music',
       'data/videos',
       'data/audio',
       'data/scripts',
@@ -481,8 +482,8 @@ class ProductionManagementAgent {
         path: generatedPath,
         duration: productionData.estimatedDuration,
         format: 'mp3',
-        generatedWith: 'AI',
-        quality: usable ? 'high' : null,
+        generatedWith: evidence.provider === 'local_os' ? 'Operating-system speech synthesis' : 'AI TTS',
+        quality: usable ? (evidence.provider === 'local_os' ? 'standard' : 'high') : null,
         status: usable ? 'ready' : 'unavailable',
         simulated: !usable,
         provider: evidence.provider || null,
@@ -647,6 +648,7 @@ class ProductionManagementAgent {
       
       const videoResult = this.aiVideoGenerator.lastVideoResult || { actualProvider: 'unknown', model: null };
       const footageFirst = videoResult.actualProvider === 'footage_first';
+      productionData.assets.audio.backgroundMusicPath = this.aiVideoGenerator.lastMusicPath || null;
       productionData.assets.finalVideo = {
         path: finalVideoPath,
         fileSize: stats.size,
