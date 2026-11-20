@@ -73,6 +73,9 @@ class AIVideoGenerator {
     this.spawn = options.spawn || nodeSpawn;
     this.runFFmpeg = options.runFFmpeg || runFFmpeg;
     this.platform = options.platform || process.platform;
+    this.hardwareProfile = options.hardwareProfile || null;
+    this.renderProfile = null;
+    this.lastMusicPath = null;
     
     // Initialize AI services with graceful fallback
     const openaiKey = resolvedCredentials.openai?.apiKey || process.env.OPENAI_API_KEY;
@@ -592,26 +595,80 @@ class AIVideoGenerator {
 
     const visualPath = outputPath.replace(/\.mp4$/i, '_hybrid_visual.mp4');
     await this.renderMediaTimeline(segments, visualPath);
-    await this.addAudioToVideo(visualPath, audioPath, outputPath, { loopVideo: true });
+    const musicPath = await this.findBackgroundMusic();
+    this.lastMusicPath = musicPath;
+    await this.addAudioToVideo(visualPath, audioPath, outputPath, { loopVideo: true, musicPath });
     await fs.unlink(visualPath).catch(() => {});
     return outputPath;
   }
 
+  async getRenderProfile() {
+    if (this.renderProfile) return this.renderProfile;
+    let hardware = this.hardwareProfile;
+    if (!hardware) {
+      try {
+        const { detectHardwareProfile } = require('./hardware-profile');
+        hardware = await detectHardwareProfile();
+      } catch (_error) {
+        hardware = { profile: 'integrated' };
+      }
+      this.hardwareProfile = hardware;
+    }
+    const profile = hardware?.profile || 'integrated';
+    const defaultWidth = profile === 'high_gpu' ? 1920 : profile === 'integrated' ? 960 : 1280;
+    const width = Math.max(640, Math.min(3840, Number(process.env.VIDEO_OUTPUT_WIDTH || defaultWidth)));
+    const height = Math.max(360, Math.min(2160, Number(process.env.VIDEO_OUTPUT_HEIGHT || Math.round(width * 9 / 16))));
+    this.renderProfile = { width, height, fps: 24, hardwareProfile: profile };
+    return this.renderProfile;
+  }
+
+  async findBackgroundMusic() {
+    const directory = path.join(process.cwd(), 'data', 'music');
+    const extensions = new Set(['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac']);
+    const files = await fs.readdir(directory).catch(() => []);
+    const selected = files
+      .filter(name => extensions.has(path.extname(name).toLowerCase()))
+      .sort()[0];
+    return selected ? path.join(directory, selected) : null;
+  }
+
   async renderMediaTimeline(segments, outputPath) {
+    if (!segments.length) throw new Error('A media timeline requires at least one segment');
+    const profile = await this.getRenderProfile();
     const args = ['-y'];
     for (const segment of segments) {
       const duration = Number(segment.duration).toFixed(2);
-      if (segment.type === 'image') args.push('-loop', '1', '-t', duration, '-framerate', '30', '-i', segment.path);
-      // Loop short clips to fill their slot, but bound the input: an unbounded
-      // -stream_loop keeps FFmpeg decoding long after trim has what it needs.
+      if (segment.type === 'image') args.push('-loop', '1', '-t', duration, '-framerate', String(profile.fps), '-i', segment.path);
       else args.push('-stream_loop', '-1', '-t', duration, '-i', segment.path);
     }
-    const filters = segments.map((segment, index) =>
-      `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p,trim=duration=${Number(segment.duration).toFixed(2)},setpts=PTS-STARTPTS[v${index}]`
+
+    const filters = segments.map((segment, index) => {
+      const duration = Number(segment.duration).toFixed(2);
+      return `[${index}:v]scale=${profile.width}:${profile.height}:force_original_aspect_ratio=increase,crop=${profile.width}:${profile.height},fps=${profile.fps},format=yuv420p,trim=duration=${duration},setpts=PTS-STARTPTS[v${index}]`;
+    });
+
+    const transition = 0.35;
+    if (segments.length === 1) {
+      filters.push('[v0]null[vout]');
+    } else {
+      let previous = 'v0';
+      let elapsed = Number(segments[0].duration);
+      for (let index = 1; index < segments.length; index++) {
+        const output = index === segments.length - 1 ? 'vout' : `vx${index}`;
+        const fadeDuration = Math.min(transition, Number(segments[index - 1].duration) / 3, Number(segments[index].duration) / 3);
+        const offset = Math.max(0, elapsed - fadeDuration);
+        filters.push(`[${previous}][v${index}]xfade=transition=fade:duration=${fadeDuration.toFixed(2)}:offset=${offset.toFixed(2)}[${output}]`);
+        previous = output;
+        elapsed += Number(segments[index].duration) - fadeDuration;
+      }
+    }
+    args.push(
+      '-filter_complex', filters.join(';'),
+      '-map', '[vout]',
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '25',
+      '-pix_fmt', 'yuv420p', '-movflags', '+faststart', outputPath
     );
-    filters.push(`${segments.map((_, index) => `[v${index}]`).join('')}concat=n=${segments.length}:v=1:a=0[vout]`);
-    args.push('-filter_complex', filters.join(';'), '-map', '[vout]', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', outputPath);
-    await runFFmpeg(args);
+    await this.runFFmpeg(args);
     return outputPath;
   }
 
@@ -1050,19 +1107,32 @@ class AIVideoGenerator {
       throw error;
     }
 
-    // FFmpeg cannot write to its own input, so mux to a temp file when paths collide
     const muxPath = outputPath === videoPath
       ? outputPath.replace(/\.mp4$/i, '_muxed.mp4')
       : outputPath;
-
     const videoInput = options.loopVideo ? ['-stream_loop', '-1', '-i', videoPath] : ['-i', videoPath];
-    await runFFmpeg(['-y', ...videoInput, '-i', audioPath, '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac', '-shortest', muxPath]);
+    const musicPath = options.musicPath && await this.isUsableAudioFile(options.musicPath) ? options.musicPath : null;
 
-    if (muxPath !== outputPath) {
-      await fs.rename(muxPath, outputPath);
+    if (musicPath) {
+      await this.runFFmpeg([
+        '-y', ...videoInput,
+        '-i', audioPath,
+        '-stream_loop', '-1', '-i', musicPath,
+        '-filter_complex',
+        '[1:a]volume=1.0[narration];[2:a]volume=0.12[music];[narration][music]amix=inputs=2:duration=first:dropout_transition=2[aout]',
+        '-map', '0:v:0', '-map', '[aout]',
+        '-c:v', 'copy', '-c:a', 'aac', '-shortest', muxPath
+      ]);
+    } else {
+      await this.runFFmpeg([
+        '-y', ...videoInput, '-i', audioPath,
+        '-map', '0:v:0', '-map', '1:a:0',
+        '-c:v', 'copy', '-c:a', 'aac', '-shortest', muxPath
+      ]);
     }
 
-    this.logger.info('Audio added to video successfully');
+    if (muxPath !== outputPath) await fs.rename(muxPath, outputPath);
+    this.logger.info(musicPath ? 'Narration and background music mixed successfully' : 'Narration added to video successfully');
     return outputPath;
   }
 
