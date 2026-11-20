@@ -112,7 +112,14 @@ class MediaGenerationService {
           generateAudio: settings.generateAudio
         }
       });
-      clips.push({ ...scene, path: result.outputPath, provider: provider.id, model: result.task.model, taskId: result.task.external_task_id });
+      clips.push({
+        ...scene,
+        path: result.outputPath,
+        provider: provider.id,
+        model: result.task.model,
+        taskId: result.task.external_task_id,
+        source: result.task.providerData?.source || null
+      });
     }
     const models = [...new Set(clips.map(clip => clip.model).filter(Boolean))];
     return {
@@ -215,7 +222,10 @@ class MediaGenerationService {
     return {
       outputUrl: remote.localRunDir ? null : (remote.outputUrl || null),
       taskType: remote.taskType || null,
-      model: remote.model || null
+      model: remote.model || null,
+      source: remote.source || null,
+      tempPath: remote.tempPath || null,
+      duration: remote.duration || null
     };
   }
 
