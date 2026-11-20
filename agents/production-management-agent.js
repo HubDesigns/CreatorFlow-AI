@@ -358,16 +358,12 @@ class ProductionManagementAgent {
       // Local footage and local text-to-video do not need a paid image API.
       // Detect the actual provider selected by the existing routing policy.
       if (mediaGeneration?.settings && mediaGeneration?.registry) {
-        try {
-          const settings = await mediaGeneration.settings();
-          selectedProvider = mediaGeneration.registry.select(
-            settings.provider,
-            settings.order,
-            { duration: settings.clipDuration }
-          );
-        } catch (selectionError) {
-          this.logger.warn(`Could not preselect a local video provider: ${selectionError.message}`);
-        }
+        const settings = await mediaGeneration.settings();
+        selectedProvider = mediaGeneration.registry.select(
+          settings.provider,
+          settings.order,
+          { duration: settings.clipDuration }
+        );
       }
 
       const visualAssets = [];
