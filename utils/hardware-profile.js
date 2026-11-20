@@ -64,6 +64,39 @@ function classifyHardware({ totalMemoryMb, gpus }) {
   };
 }
 
+function detectGpuVendor(name = '') {
+  if (/nvidia|geforce|quadro/i.test(name)) return 'NVIDIA';
+  if (/intel|arc graphics/i.test(name)) return 'Intel';
+  if (/amd|radeon|ati/i.test(name)) return 'AMD';
+  if (/apple/i.test(name)) return 'Apple';
+  return 'Unknown';
+}
+
+function parseLinuxLspci(output = '') {
+  return String(output).split(/\r?\n/).filter(line => /VGA compatible controller|3D controller|Display controller/i.test(line)).map(line => {
+    const name = line.split(':').slice(2).join(':').trim() || line.trim();
+    return { name, dedicatedMemoryMb: null, vendor: detectGpuVendor(name), source: 'lspci' };
+  });
+}
+
+function parseMacDisplays(output = '') {
+  try {
+    const parsed = JSON.parse(output);
+    const displays = parsed.SPDisplaysDataType || [];
+    return displays.map(display => {
+      const name = display.sppci_model || display._name || 'Unknown Apple display adapter';
+      const memoryText = String(display.spdisplays_vram || display.spdisplays_vram_shared || '');
+      const match = memoryText.match(/(\d+(?:\.\d+)?)\s*(GB|MB)/i);
+      const dedicatedMemoryMb = match
+        ? Math.round(Number(match[1]) * (/GB/i.test(match[2]) ? 1024 : 1))
+        : null;
+      return { name, dedicatedMemoryMb, vendor: detectGpuVendor(name), source: 'system_profiler' };
+    });
+  } catch (_error) {
+    return [];
+  }
+}
+
 async function detectHardwareProfile(options = {}) {
   const platform = options.platform || process.platform;
   const cpus = options.cpus || os.cpus();
@@ -88,6 +121,12 @@ async function detectHardwareProfile(options = {}) {
       options.timeoutMs || 1800
     );
     gpus = parseWindowsAdapters(windowsOutput);
+  } else if (!gpus.length && platform === 'linux') {
+    const linuxOutput = await execFileText(execFile, 'lspci', [], options.timeoutMs || 1800);
+    gpus = parseLinuxLspci(linuxOutput);
+  } else if (!gpus.length && platform === 'darwin') {
+    const macOutput = await execFileText(execFile, 'system_profiler', ['SPDisplaysDataType', '-json'], options.timeoutMs || 4000);
+    gpus = parseMacDisplays(macOutput);
   }
 
   const summary = classifyHardware({ totalMemoryMb, gpus });
@@ -112,5 +151,7 @@ module.exports = {
   detectHardwareProfile,
   parseNvidiaSmi,
   parseWindowsAdapters,
+  parseLinuxLspci,
+  parseMacDisplays,
   classifyHardware
 };
