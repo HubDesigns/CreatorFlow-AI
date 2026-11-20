@@ -31,7 +31,7 @@ You need:
 
 - Node.js 18.17 or newer
 - A Google account and YouTube Data API credentials ([setup steps](#youtube-credentials))
-- An API key for at least one [text provider](docs/providers.md#text). Gemini has free tiers for text and narration.
+- An API key for at least one [text provider](docs/providers.md#text). Gemini has free tiers for text; local narration is available offline.
 
 ```bash
 git clone https://github.com/darkzOGx/youtube-automation-agent.git
