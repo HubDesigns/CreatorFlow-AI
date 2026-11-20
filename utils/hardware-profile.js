@@ -47,14 +47,14 @@ function classifyHardware({ totalMemoryMb, gpus }) {
   const vram = Number(bestDiscrete?.dedicatedMemoryMb || 0);
   const ramGb = totalMemoryMb / 1024;
   let profile = 'integrated';
-  if (vram >= 8 && ramGb >= 16) profile = 'high_gpu';
+  if (vram >= 7800 && ramGb >= 16) profile = 'high_gpu';
   else if (vram >= 4 && ramGb >= 12) profile = 'entry_gpu';
   else if (ramGb >= 16) profile = 'integrated_plus';
   return {
     profile,
     ramGb: Math.round(ramGb * 10) / 10,
     dedicatedVramGb: vram ? Math.round((vram / 1024) * 10) / 10 : null,
-    localLtxCandidate: Boolean(nvidia && nvidia.dedicatedMemoryMb >= 8192 && ramGb >= 16),
+    localLtxCandidate: Boolean(nvidia && nvidia.dedicatedMemoryMb >= 7800 && ramGb >= 16),
     defaultVideoMode: 'footage_first',
     explanation: profile === 'high_gpu'
       ? 'A dedicated GPU with at least 8 GB reported VRAM was detected. Local AI video may be tested as an optional engine; compatibility is not guaranteed.'
