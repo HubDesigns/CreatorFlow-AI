@@ -306,36 +306,70 @@ class ProductionManagementAgent {
   }
 
   async generateVideoContent(productionData) {
-    this.logger.info('Generating AI video content...');
-    
+    this.logger.info('Preparing visual assets for video production...');
+
     try {
       const { script } = productionData;
-      
-      // Generate visual assets using DALL-E
-      const visualPrompts = this.createVisualPromptsFromScript(script);
+      const mediaGeneration = this.aiVideoGenerator.mediaGeneration;
+      let selectedProvider = null;
+
+      // Local footage and local text-to-video do not need a paid image API.
+      // Detect the actual provider selected by the existing routing policy.
+      if (mediaGeneration?.settings && mediaGeneration?.registry) {
+        try {
+          const settings = await mediaGeneration.settings();
+          selectedProvider = mediaGeneration.registry.select(
+            settings.provider,
+            settings.order,
+            { duration: settings.clipDuration }
+          );
+        } catch (selectionError) {
+          this.logger.warn(`Could not preselect a local video provider: ${selectionError.message}`);
+        }
+      }
+
       const visualAssets = [];
+      if (selectedProvider && ['footage_first', 'local_ltx'].includes(selectedProvider.id)) {
+        const sourceMode = selectedProvider.id;
+        this.logger.info(
+          sourceMode === 'footage_first'
+            ? 'Using footage-first mode: no AI image API is required.'
+            : 'Using local LTX text-to-video: reference images are optional and will be skipped.'
+        );
+        productionData.assets.video = {
+          visualAssets,
+          duration: productionData.estimatedDuration,
+          format: 'mp4',
+          resolution: 'adaptive',
+          fps: 24,
+          sourceMode,
+          generatedWith: sourceMode === 'footage_first' ? 'licensed footage + local FFmpeg' : 'local LTX text-to-video'
+        };
+        productionData.timeline.videoGenerated = new Date().toISOString();
+        return visualAssets;
+      }
+
+      // Cloud providers retain the existing optional reference-image workflow.
+      const visualPrompts = this.createVisualPromptsFromScript(script);
       const profile = await this.db.getChannelProfile?.() || {};
       const visualStyle = profile.visual_style || 'ethereal';
-      
       for (const prompt of visualPrompts) {
         const assets = await this.aiVideoGenerator.generateVisualAssets(prompt, visualStyle, 1);
         visualAssets.push(...assets);
       }
-      
+
       productionData.assets.video = {
-        visualAssets: visualAssets,
+        visualAssets,
         duration: productionData.estimatedDuration,
         format: 'mp4',
         resolution: '1920x1080',
         fps: 30,
         generatedWith: 'AI'
       };
-      
       productionData.timeline.videoGenerated = new Date().toISOString();
-      
       return visualAssets;
     } catch (error) {
-      this.logger.error('Real visual asset generation failed; production cannot continue with placeholder slides:', error);
+      this.logger.error('Visual asset preparation failed; production cannot continue with placeholder slides:', error);
       throw error;
     }
   }
