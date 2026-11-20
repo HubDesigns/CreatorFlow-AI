@@ -21,23 +21,24 @@ Anthropic Claude is available through OpenRouter (`anthropic/claude-fable-5.1`).
 
 ## Narration and images
 
-- **Narration** uses the first configured provider in this order: ElevenLabs (Eleven v3, needs `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID`), OpenAI (`gpt-4o-mini-tts`), then Gemini (`gemini-3.8-flash-tts`). A video without working narration can't be approved.
-- **Images** use OpenAI (GPT Image 2) and Gemini (`gemini-3.1-flash-image`, which needs billing enabled), each falling back to the other. With neither, slides use gradient backgrounds and thumbnails come from the built-in designer.
+- **Narration** uses ElevenLabs, OpenAI, or Gemini when configured; otherwise Windows System.Speech, macOS `say`, or Linux eSpeak can create narration locally without an API key. A video without working narration can't be approved.
+- **Images** are optional for footage-first production. Topic-matched local photos can be placed in `data/images`; cloud AI image generation remains an optional workflow for reference visuals and thumbnails.
 
 ## Video
 
-Automatic AI-video routing is available for production. For a no-subscription setup, select the local LTX-Video Q8 provider explicitly; it runs on your own NVIDIA GPU and does not call a paid video API. If it is selected but not installed, production stops with an actionable error and does not fall back to a cloud provider. Cloud providers remain optional. Local slideshow rendering remains available only when selected explicitly.
+Automatic routing is footage-first. The standard path selects relevant moving clips from the local `data/footage` library, optional photos from `data/images`, local narration, optional music, and FFmpeg rendering. It works without an NVIDIA GPU or paid AI video API. When no local clip matches, it can search Pixabay if `PIXABAY_API_KEY` is configured; otherwise it stops with a clear missing-footage error.
 
 | Provider | Default model | Best fit | Clip limits | Env var |
 | --- | --- | --- | --- | --- |
-| Lightricks (local) | `LTX-Video 2B Q8` | Free local moving footage on an 8 GB NVIDIA GPU; requires a separate Python/CUDA runtime | Up to 5 seconds per clip in CreatorFlow | `LTX_VIDEO_HOME`, `LTX_CHECKPOINT_DIR`, `LTX_UNET_PATH` |
+| Local footage-first | `Local footage + FFmpeg` | Any PC; local video library or optional free Pixabay API key | 1–120 seconds per clip | `FOOTAGE_LIBRARY_DIR`, `PIXABAY_API_KEY` |
+| Lightricks (optional local AI) | `LTX-Video 2B Q8` | Experimental local text-to-video on supported NVIDIA/CUDA systems; separate Python/CUDA runtime required | Up to 5 seconds per clip in CreatorFlow | `LTX_VIDEO_HOME`, `LTX_CHECKPOINT_DIR`, `LTX_UNET_PATH` |
 | ByteDance | `bytedance/seedance-2.5` through Replicate | Cinematic long scenes and large reference sets | 4–30 seconds | `REPLICATE_API_TOKEN` |
 | MiniMax | `MiniMax-H3` | Multimodal references, native stereo audio, optional 2K | 4–15 seconds | `MINIMAX_API_KEY` |
 | Google | `gemini-omni-1.1-flash` | Fast generation and conversational editing | 3–10 seconds | `GEMINI_API_KEY` |
 | Kuaishou | `kling-v3-omni` | Storyboards and character/voice consistency | 3–15 seconds | `KLING_ACCESS_KEY`, `KLING_SECRET_KEY` |
 | Alibaba | Wan 2.7 task-specific models | Efficient generation, reference video, and continuation | 2–15 seconds | `DASHSCOPE_API_KEY` |
 
-Long videos use hybrid assembly: generated clips for the hook and key sections, with the rest of the timeline filled locally. See [AI video generation](features.md#ai-video-generation).
+Long videos use hybrid assembly: real moving clips for the hook and key sections, with relevant local photos filling remaining timeline sections. Scene transitions, narration, and optional background music are rendered locally. See [footage-first setup](footage-first-video.md) and [AI video generation](features.md#ai-video-generation).
 
 ## Environment variables
 
@@ -51,7 +52,9 @@ GEMINI_API_KEY=...
 # ELEVENLABS_API_KEY=...
 # ELEVENLABS_VOICE_ID=...
 # OPENAI_API_KEY=sk-...
-VIDEO_PROVIDER=local_ltx     # local_ltx, auto, slideshow, seedance, minimax_h3, google_omni, kling, wan
+VIDEO_PROVIDER=auto          # footage_first, local_ltx, slideshow, seedance, minimax_h3, google_omni, kling, wan
+# VIDEO_PROVIDER_ORDER=footage_first,local_ltx,seedance,minimax_h3,google_omni,kling,wan
+# PIXABAY_API_KEY=...         # optional free stock-video search; local footage works without it
 VIDEO_ALLOW_PAID_PROVIDERS=false  # automatic routing stays local unless explicitly enabled
 # VIDEO_MAX_GENERATED_SECONDS=20
 
@@ -63,7 +66,7 @@ CHANNEL_NAME=Your Channel Name
 DEFAULT_PRIVACY_STATUS=private
 ```
 
-For Windows installation instructions, hardware notes, and the local model setup, see [Free local LTX-Video Q8](local-ltx-video.md). The dashboard listens on `127.0.0.1` by default. If you set `HOST=0.0.0.0` to reach it from other devices, also set `API_KEY`, which every request that changes something must then send in the `x-api-key` header.
+For local footage, photos, music, Pixabay caching, and offline narration, see [footage-first setup](footage-first-video.md). For optional CUDA model installation, see [Free local LTX-Video Q8](local-ltx-video.md). The dashboard listens on `127.0.0.1` by default. If you set `HOST=0.0.0.0` to reach it from other devices, also set `API_KEY`, which every request that changes something must then send in the `x-api-key` header.
 
 ## Adding a provider
 
