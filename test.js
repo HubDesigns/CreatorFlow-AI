@@ -1348,7 +1348,7 @@ class SystemTest {
 
       let automaticPaidFallbackBlocked = false;
       try {
-        new VideoProviderRegistry({}, { providers: { seedance: fake } }).select('auto', ['seedance'], { duration: 4 });
+        new VideoProviderRegistry({}, { providers: { seedance: fake, footage_first: unavailableFootage, local_ltx: unavailableLocalLtx } }).select('auto', ['seedance'], { duration: 4 });
       } catch (error) {
         automaticPaidFallbackBlocked = error.code === 'VIDEO_PROVIDER_UNAVAILABLE';
       }
@@ -1359,7 +1359,7 @@ class SystemTest {
 
       let explicitPaidProviderBlocked = false;
       try {
-        new VideoProviderRegistry({}, { providers: { seedance: fake } }).select('seedance');
+        new VideoProviderRegistry({}, { providers: { seedance: fake, footage_first: unavailableFootage, local_ltx: unavailableLocalLtx } }).select('seedance');
       } catch (error) {
         explicitPaidProviderBlocked = error.code === 'PAID_VIDEO_PROVIDER_DISABLED';
       }
