@@ -1264,9 +1264,15 @@ class SystemTest {
     const { MediaGenerationService } = require('./utils/media-generation-service');
     const {
       VideoProvider, VideoProviderRegistry, SeedanceProvider, MiniMaxH3Provider,
-      GoogleOmniProvider, KlingProvider, WanProvider, LocalLTXProvider
+      GoogleOmniProvider, KlingProvider, WanProvider, LocalLTXProvider, FootageFirstProvider
     } = require('./utils/video-providers');
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'yaa-media-provider-'));
+    const unavailableFootage = new FootageFirstProvider({ directory: path.join(directory, 'no-footage') });
+    const unavailableLocalLtx = new LocalLTXProvider({}, {
+      home: path.join(directory, 'missing-ltx'),
+      checkpointDir: path.join(directory, 'missing-base'),
+      unetPath: path.join(directory, 'missing-unet')
+    });
     const db = new Database();
     db.dbPath = path.join(directory, 'media.db');
     await db.initialize();
@@ -1299,7 +1305,7 @@ class SystemTest {
         await fs.copyFile(source, outputPath);
         return outputPath;
       };
-      const registry = new VideoProviderRegistry({}, { providers: { seedance: fake } });
+      const registry = new VideoProviderRegistry({}, { providers: { seedance: fake, footage_first: unavailableFootage, local_ltx: unavailableLocalLtx } });
       const service = new MediaGenerationService(db, {}, { registry, pollIntervalMs: 10, sleep: async () => {} });
       const output = path.join(directory, 'output.mp4');
       const input = {
@@ -1328,7 +1334,7 @@ class SystemTest {
       if (!readiness.providers.find(provider => provider.id === 'seedance')?.credentialsConfigured) {
         throw new Error('Configured provider status was not reported');
       }
-      const emptyReadiness = getVideoProviderReadiness(new VideoProviderRegistry({}));
+      const emptyReadiness = getVideoProviderReadiness(new VideoProviderRegistry({}, { providers: { footage_first: unavailableFootage, local_ltx: unavailableLocalLtx } }));
       if (emptyReadiness.ready || emptyReadiness.configuredCount !== 0 || emptyReadiness.providers.some(provider => provider.id === 'slideshow')) {
         throw new Error('An unconfigured system must not report slideshow as AI video readiness');
       }
@@ -1363,7 +1369,7 @@ class SystemTest {
 
       let localProviderUnavailableBlocked = false;
       try {
-        new VideoProviderRegistry({}).select('local_ltx');
+        new VideoProviderRegistry({}, { providers: { footage_first: unavailableFootage, local_ltx: unavailableLocalLtx } }).select('local_ltx');
       } catch (error) {
         localProviderUnavailableBlocked = error.code === 'VIDEO_PROVIDER_UNAVAILABLE';
       }
@@ -1373,7 +1379,7 @@ class SystemTest {
 
       const shortOnly = new VideoProvider('wan', { model: 'wan-test', capabilities: { minDuration: 2, maxDuration: 15, firstFrame: true } });
       shortOnly.isAvailable = () => true;
-      const routed = new VideoProviderRegistry({}, { providers: { seedance: fake, wan: shortOnly }, allowCloudProviders: true });
+      const routed = new VideoProviderRegistry({}, { providers: { seedance: fake, wan: shortOnly, footage_first: unavailableFootage, local_ltx: unavailableLocalLtx }, allowCloudProviders: true });
       if (routed.select('auto', ['wan', 'seedance'], { duration: 20 }).id !== 'seedance') {
         throw new Error('Automatic video routing ignored the requested duration capability');
       }
@@ -1471,7 +1477,7 @@ class SystemTest {
         outputPath: path.join(directory, 'local-ltx-output.mp4')
       });
 
-      const localReadiness = getVideoProviderReadiness(new VideoProviderRegistry({}, { providers: { local_ltx: localProvider } }));
+      const localReadiness = getVideoProviderReadiness(new VideoProviderRegistry({}, { providers: { local_ltx: localProvider, footage_first: unavailableFootage } }));
       if (!localReadiness.ready || !localReadiness.localReady || localReadiness.configuredCount !== 1 || !localReadiness.providers.find(provider => provider.id === 'local_ltx')?.installed) {
         throw new Error('An installed local LTX provider should mark free video readiness as ready');
       }
