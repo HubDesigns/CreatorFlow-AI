@@ -22,7 +22,7 @@ Anthropic Claude is available through OpenRouter (`anthropic/claude-fable-5.1`).
 ## Narration and images
 
 - **Narration** defaults to Windows System.Speech, macOS `say`, or Linux eSpeak when installed, so it can work offline without an API key. Cloud voices (ElevenLabs, OpenAI, Gemini) are used only when `TTS_PROVIDER` is explicitly set to that provider or to `auto`. A video without working narration can't be approved.
-- **Images** are optional for footage-first production. Topic-matched local photos can be placed in `data/images`; cloud AI image generation remains an optional workflow for reference visuals and thumbnails.
+- **Images** are optional for footage-first production. Topic-matched local photos can be placed in `data/images`; with `PIXABAY_API_KEY`, the app can also retrieve free stock photos and retain source credits. Cloud AI image generation remains an optional workflow for reference visuals and thumbnails.
 
 ## Video
 
