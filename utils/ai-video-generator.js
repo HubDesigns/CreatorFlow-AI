@@ -129,24 +129,36 @@ class AIVideoGenerator {
 
     try {
       let generatedPath;
-      if (this.elevenLabsApiKey && this.elevenLabsVoiceId) {
+      const requestedProvider = String(process.env.TTS_PROVIDER || 'local_os').toLowerCase();
+      const selectedProvider = requestedProvider === 'auto'
+        ? (this.elevenLabsApiKey && this.elevenLabsVoiceId ? 'elevenlabs' : this.openai ? 'openai' : this.gemini ? 'gemini' : 'local_os')
+        : requestedProvider;
+
+      if (selectedProvider === 'elevenlabs') {
+        if (!this.elevenLabsApiKey || !this.elevenLabsVoiceId) throw new Error('TTS_PROVIDER=elevenlabs requires ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID');
         provider = 'elevenlabs';
         model = this.elevenLabsModel;
         generatedPath = await this.generateElevenLabsTTS(text, outputPath);
-      } else if (this.openai) {
+      } else if (selectedProvider === 'openai') {
+        if (!this.openai) throw new Error('TTS_PROVIDER=openai requires OPENAI_API_KEY');
         provider = 'openai';
         model = 'gpt-4o-mini-tts';
         generatedPath = await this.generateOpenAITTS(text, outputPath);
-      } else if (this.gemini) {
+      } else if (selectedProvider === 'gemini') {
+        if (!this.gemini) throw new Error('TTS_PROVIDER=gemini requires GEMINI_API_KEY');
         provider = 'gemini';
         model = process.env.GEMINI_TTS_MODEL || 'gemini-3.8-flash-tts';
         generatedPath = await this.generateGeminiTTS(text, outputPath);
-      } else {
+      } else if (selectedProvider === 'local_os') {
         provider = 'local_os';
         model = this.platform === 'win32'
           ? 'Windows System.Speech'
           : this.platform === 'darwin' ? 'macOS say' : 'eSpeak';
         generatedPath = await this.generateLocalTTSAudio(text, outputPath);
+      } else {
+        const error = new Error(`Unsupported TTS_PROVIDER "${requestedProvider}". Use local_os, auto, openai, gemini, or elevenlabs.`);
+        error.code = 'TTS_PROVIDER_UNSUPPORTED';
+        throw error;
       }
 
       const usable = await this.isUsableAudioFile(generatedPath);
