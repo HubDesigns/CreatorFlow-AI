@@ -503,6 +503,7 @@ class AIVideoGenerator {
   async generateVideo(script, visualAssets, audioPath, outputPath, options = {}) {
     this.logger.info('Generating video from real media assets...');
     this.lastVideoResult = null;
+    this.lastMusicPath = null;
 
     try {
       if (!this.mediaGeneration || !options.productionId) {
@@ -710,8 +711,10 @@ class AIVideoGenerator {
     if (output && output.length > 0) {
       await this.downloadVideo(output[0], outputPath);
       
-      // Add audio track
-      await this.addAudioToVideo(outputPath, audioPath, outputPath);
+      // Add narration and optional locally licensed background music.
+      const musicPath = await this.findBackgroundMusic();
+      this.lastMusicPath = musicPath;
+      await this.addAudioToVideo(outputPath, audioPath, outputPath, { musicPath });
     }
 
     return outputPath;
@@ -762,8 +765,10 @@ class AIVideoGenerator {
       const duration = await this.resolveSlideshowDuration(script, audioPath);
       await this.renderSlidesToVideo(stills, duration, videoPath);
 
-      // Add audio
-      await this.addAudioToVideo(videoPath, audioPath, outputPath);
+      // Add narration and optional locally licensed background music.
+      const musicPath = await this.findBackgroundMusic();
+      this.lastMusicPath = musicPath;
+      await this.addAudioToVideo(videoPath, audioPath, outputPath, { musicPath });
 
       return outputPath;
     } finally {
