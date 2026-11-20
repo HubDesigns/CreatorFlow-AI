@@ -47,6 +47,8 @@ Do not commit your key or share it in screenshots, logs, or chat. If you do not 
 
 The application records Pixabay's source page, creator, and selected quality in the production's source-credit metadata. Review the source credits before publishing. Pixabay API documentation: https://pixabay.com/api/docs/
 
+Pixabay's same free API key can also supply topic-matched photos when the local `data/images` folder has fewer than four matching images. Image search results are cached for 24 hours, selected web-size images are downloaded locally, and their source page/creator metadata is included in the production credits. If image search is unavailable, the moving-footage pipeline continues with whatever local photos are available.
+
 ## 3. Hardware-adaptive rendering
 
 The application detects CPU, RAM, and available GPU information. The footage renderer uses software H.264 encoding with the FFmpeg `ultrafast` preset, so the standard path does not depend on CUDA.
