@@ -19,7 +19,7 @@ function normalizeSearchQuery(value = '') {
   const words = String(value).toLowerCase()
     .replace(/[^a-z0-9\s-]/g, ' ')
     .split(/\s+/)
-    .filter(word => word.length > 2 && !STOP_WORDS.has(word));
+    .filter(word => word.length > 1 && !STOP_WORDS.has(word));
   return [...new Set(words)].slice(0, 7).join(' ').slice(0, 100) || 'nature landscape';
 }
 
