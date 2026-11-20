@@ -76,6 +76,7 @@ class AIVideoGenerator {
     this.hardwareProfile = options.hardwareProfile || null;
     this.renderProfile = null;
     this.lastMusicPath = null;
+    this.musicDirectory = path.resolve(options.musicDirectory || path.join(process.cwd(), 'data', 'music'));
     
     // Initialize AI services with graceful fallback
     const openaiKey = resolvedCredentials.openai?.apiKey || process.env.OPENAI_API_KEY;
@@ -164,7 +165,7 @@ class AIVideoGenerator {
       this.lastNarrationResult = {
         status: 'failed', path: null, provider, model, externalTaskId: null,
         generatedAt: new Date().toISOString(), simulated: false, error: error.message,
-        cost: { provider, amount: null, currency: null, invoiceRequired: provider !== 'simulation' }
+        cost: { provider, amount: null, currency: null, invoiceRequired: !['simulation', 'local_os'].includes(provider) }
       };
       this.logger.error('TTS generation failed:', error);
       throw error;
@@ -624,7 +625,7 @@ class AIVideoGenerator {
   }
 
   async findBackgroundMusic() {
-    const directory = path.join(process.cwd(), 'data', 'music');
+    const directory = this.musicDirectory;
     const extensions = new Set(['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac']);
     const files = await fs.readdir(directory).catch(() => []);
     const selected = files
