@@ -57,7 +57,7 @@ class FootageFirstProvider {
     };
     this.directory = path.resolve(options.directory || process.env.FOOTAGE_LIBRARY_DIR || path.join(process.cwd(), 'data', 'footage'));
     this.cacheDirectory = path.resolve(options.cacheDirectory || path.join(process.cwd(), 'data', 'cache', 'pixabay-video-search'));
-    this.apiKey = options.apiKey || process.env.PIXABAY_API_KEY || '';
+    this.apiKey = options.apiKey !== undefined ? options.apiKey : (process.env.PIXABAY_API_KEY || '');
     this.http = options.http || axios;
     this.hardwareProfile = options.hardwareProfile || null;
     this.ffmpeg = options.runFFmpeg || runFFmpeg;
