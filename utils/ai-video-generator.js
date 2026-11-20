@@ -668,41 +668,136 @@ class AIVideoGenerator {
   }
 
   async renderMediaTimeline(segments, outputPath) {
-    if (!segments.length) throw new Error('A media timeline requires at least one segment');
-    const profile = await this.getRenderProfile();
-    const args = ['-y'];
-    for (const segment of segments) {
-      const duration = Number(segment.duration).toFixed(2);
-      if (segment.type === 'image') args.push('-loop', '1', '-t', duration, '-framerate', String(profile.fps), '-i', segment.path);
-      else args.push('-stream_loop', '-1', '-t', duration, '-i', segment.path);
+    if (!Array.isArray(segments) || segments.length === 0) {
+      throw new Error('A media timeline requires at least one segment');
     }
 
-    const filters = segments.map((segment, index) => {
-      const duration = Number(segment.duration).toFixed(2);
-      return `[${index}:v]scale=${profile.width}:${profile.height}:force_original_aspect_ratio=increase,crop=${profile.width}:${profile.height},fps=${profile.fps},format=yuv420p,trim=duration=${duration},setpts=PTS-STARTPTS[v${index}]`;
+    if (typeof outputPath !== 'string' || !outputPath.trim()) {
+      throw new Error('A valid output path is required for media timeline rendering');
+    }
+
+    const profile = await this.getRenderProfile();
+    const args = ['-y'];
+    const transition = 0.35;
+
+    // Validate all segments before starting FFmpeg. This prevents malformed
+    // durations or missing media paths from producing confusing FFmpeg errors.
+    const durations = segments.map((segment, index) => {
+      if (!segment || typeof segment.path !== 'string' || !segment.path.trim()) {
+        throw new Error(`Media timeline segment ${index + 1} is missing a valid file path`);
+      }
+
+      if (segment.type !== 'image' && segment.type !== 'video') {
+        throw new Error(`Media timeline segment ${index + 1} has unsupported type "${segment.type}"`);
+      }
+
+      const duration = Number(segment.duration);
+      if (!Number.isFinite(duration) || duration <= 0) {
+        throw new Error(`Media timeline segment ${index + 1} must have a positive duration`);
+      }
+
+      return duration;
     });
 
-    const transition = 0.35;
+    // Prepare each input. Video clips loop when they are shorter than their
+    // assigned slot; -t bounds input reading so an infinite loop cannot occur.
+    for (let index = 0; index < segments.length; index++) {
+      const segment = segments[index];
+      const duration = durations[index].toFixed(3);
+
+      if (segment.type === 'image') {
+        args.push(
+          '-loop', '1',
+          '-t', duration,
+          '-framerate', String(profile.fps),
+          '-i', segment.path
+        );
+      } else {
+        args.push(
+          '-stream_loop', '-1',
+          '-t', duration,
+          '-i', segment.path
+        );
+      }
+    }
+
+    // Every transition overlaps adjacent segments and therefore normally
+    // shortens the final timeline. Calculate the exact overlap budget and add
+    // that time to the final segment by holding its last frame. This preserves
+    // the requested total duration without removing crossfade transitions.
+    const fadeDurations = durations.slice(1).map((duration, index) =>
+      Math.min(
+        transition,
+        durations[index] / 3,
+        duration / 3
+      )
+    );
+
+    const totalTransitionPadding = fadeDurations.reduce(
+      (total, duration) => total + duration,
+      0
+    );
+
+    const filters = segments.map((segment, index) => {
+      const duration = durations[index].toFixed(3);
+      const padding = index === segments.length - 1
+        ? totalTransitionPadding
+        : 0;
+
+      const paddingFilter = padding > 0
+        ? `,tpad=stop_mode=clone:stop_duration=${padding.toFixed(3)}`
+        : '';
+
+      return (
+        `[${index}:v]` +
+        `scale=${profile.width}:${profile.height}:force_original_aspect_ratio=increase,` +
+        `crop=${profile.width}:${profile.height},` +
+        `fps=${profile.fps},` +
+        `format=yuv420p,` +
+        `trim=duration=${duration}` +
+        `${paddingFilter},` +
+        `setpts=PTS-STARTPTS` +
+        `[v${index}]`
+      );
+    });
+
     if (segments.length === 1) {
       filters.push('[v0]null[vout]');
     } else {
       let previous = 'v0';
-      let elapsed = Number(segments[0].duration);
+      let elapsed = durations[0];
+
       for (let index = 1; index < segments.length; index++) {
-        const output = index === segments.length - 1 ? 'vout' : `vx${index}`;
-        const fadeDuration = Math.min(transition, Number(segments[index - 1].duration) / 3, Number(segments[index].duration) / 3);
+        const output = index === segments.length - 1
+          ? 'vout'
+          : `vx${index}`;
+
+        const fadeDuration = fadeDurations[index - 1];
         const offset = Math.max(0, elapsed - fadeDuration);
-        filters.push(`[${previous}][v${index}]xfade=transition=fade:duration=${fadeDuration.toFixed(2)}:offset=${offset.toFixed(2)}[${output}]`);
+
+        filters.push(
+          `[${previous}][v${index}]` +
+          `xfade=transition=fade:duration=${fadeDuration.toFixed(3)}:` +
+          `offset=${offset.toFixed(3)}[${output}]`
+        );
+
         previous = output;
-        elapsed += Number(segments[index].duration) - fadeDuration;
+        elapsed += durations[index] - fadeDuration;
       }
     }
+
     args.push(
       '-filter_complex', filters.join(';'),
       '-map', '[vout]',
-      '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '25',
-      '-pix_fmt', 'yuv420p', '-movflags', '+faststart', outputPath
+      '-an',
+      '-c:v', 'libx264',
+      '-preset', 'ultrafast',
+      '-crf', '25',
+      '-pix_fmt', 'yuv420p',
+      '-movflags', '+faststart',
+      outputPath
     );
+
     await this.runFFmpeg(args);
     return outputPath;
   }

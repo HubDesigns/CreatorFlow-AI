@@ -38,6 +38,7 @@ module.exports = [
         process: 'readonly',
         prompt: 'readonly',
         require: 'readonly',
+        setImmediate: 'readonly',
         setInterval: 'readonly',
         setTimeout: 'readonly',
         URL: 'readonly',
