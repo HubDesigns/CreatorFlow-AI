@@ -509,7 +509,7 @@ class ProductionManagementAgent {
   }
 
   async generateAudioNarration(productionData) {
-    this.logger.info('Generating AI audio narration...');
+    this.logger.info('Generating narration with the selected local or cloud speech engine...');
     
     try {
       const audioPath = path.join(__dirname, '..', 'data', 'audio', `${productionData.id}_narration.mp3`);
@@ -657,7 +657,7 @@ class ProductionManagementAgent {
   }
 
   async assembleVideo(productionData) {
-    this.logger.info('Assembling final AI-generated video...');
+    this.logger.info('Assembling final video from selected moving footage and local media...');
     
     try {
       const finalVideoPath = path.join(__dirname, '..', 'data', 'videos', `${productionData.id}_final.mp4`);
