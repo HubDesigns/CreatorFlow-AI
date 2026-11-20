@@ -26,6 +26,7 @@ class ProductionManagementAgent {
     const dirs = [
       'data/production',
       'data/assets',
+      'data/footage',
       'data/videos',
       'data/audio',
       'data/scripts',
