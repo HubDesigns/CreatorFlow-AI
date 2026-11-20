@@ -23,9 +23,10 @@ function normalizeSearchQuery(value = '') {
   return [...new Set(words)].slice(0, 7).join(' ').slice(0, 100) || 'nature landscape';
 }
 
-function scoreLocalFootage(filename, query) {
+function scoreLocalFootage(filename, query, rootDirectory = null) {
   const words = new Set(normalizeSearchQuery(query).split(/\s+/));
-  const nameWords = new Set(path.basename(filename, path.extname(filename)).toLowerCase().split(/[^a-z0-9]+/));
+  const relativePath = rootDirectory ? path.relative(rootDirectory, filename) : path.basename(filename);
+  const nameWords = new Set(relativePath.toLowerCase().replace(/\.[^.]+$/, '').split(/[^a-z0-9]+/));
   let score = 0;
   for (const word of words) if (nameWords.has(word)) score += 1;
   return score;
@@ -119,7 +120,7 @@ class FootageFirstProvider {
 
   async findLocalClip(query) {
     const files = await listVideoFiles(this.directory);
-    const ranked = files.map(file => ({ file, score: scoreLocalFootage(file, query) }))
+    const ranked = files.map(file => ({ file, score: scoreLocalFootage(file, query, this.directory) }))
       .filter(item => item.score > 0)
       .sort((a, b) => b.score - a.score || a.file.localeCompare(b.file));
     return ranked[0] || null;
