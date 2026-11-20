@@ -598,12 +598,23 @@ class AIVideoGenerator {
   async generateHybridVideo(clips, visualAssets, audioPath, outputPath, totalDuration) {
     if (!(await checkFFmpeg())) throw new Error(ffmpegInstallHint());
     const validImages = await this.filterLocalImageAssets(visualAssets);
-    const segments = clips.map(clip => ({ type: 'video', path: clip.path, duration: clip.duration }));
-    const generatedDuration = segments.reduce((sum, item) => sum + item.duration, 0);
+    const generatedDuration = clips.reduce((sum, clip) => sum + Number(clip.duration || 0), 0);
     const remaining = Math.max(0, this.parseDurationSeconds(totalDuration) - generatedDuration);
-    if (remaining && validImages.length) {
-      const perImage = Math.max(2, remaining / validImages.length);
-      for (const imagePath of validImages) segments.push({ type: 'image', path: imagePath, duration: perImage });
+    const segments = [];
+    const perImage = remaining && validImages.length ? remaining / validImages.length : 0;
+    const clipsPerImage = validImages.length ? Math.max(1, Math.ceil(clips.length / validImages.length)) : Infinity;
+    let imageIndex = 0;
+
+    clips.forEach((clip, index) => {
+      segments.push({ type: 'video', path: clip.path, duration: clip.duration });
+      if (perImage > 0 && imageIndex < validImages.length && ((index + 1) % clipsPerImage === 0 || index === clips.length - 1)) {
+        segments.push({ type: 'image', path: validImages[imageIndex], duration: perImage });
+        imageIndex++;
+      }
+    });
+    while (perImage > 0 && imageIndex < validImages.length) {
+      segments.push({ type: 'image', path: validImages[imageIndex], duration: perImage });
+      imageIndex++;
     }
     if (!segments.length) throw new Error('No usable provider clips or still images were generated');
 
