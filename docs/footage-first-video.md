@@ -23,6 +23,16 @@ The local matcher uses words from the scene prompt and filename. It will not sil
 
 Use footage only when you have the rights to use it. Keep source/license information with your local library.
 
+### Optional topic-matched photographs
+
+You can also put licensed still images in:
+
+```text
+data/images/
+```
+
+Supported formats are PNG, JPG, JPEG, and WebP. Descriptive filenames help match images to script topics, for example `solar-energy-panels.jpg` or `computer-security-network.webp`. Matching images are added to the timeline after the moving-footage scenes, with transitions. They are optional; CreatorFlow does not invent or silently substitute placeholder images.
+
 ## 2. Optional free online stock footage
 
 CreatorFlow can search Pixabay's video API when `PIXABAY_API_KEY` is configured. Pixabay's API is documented as free, but it requires an account/API key and is subject to provider limits and terms. CreatorFlow caches each search for at least 24 hours and downloads selected clips to the local machine before rendering.
