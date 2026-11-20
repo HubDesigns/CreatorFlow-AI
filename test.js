@@ -33,6 +33,7 @@ class SystemTest {
       { name: 'Production Readiness Gate', test: () => this.testProductionReadinessGate() },
       { name: 'Durable Multi-Provider Video Generation', test: () => this.testVideoProviderLayer() },
       { name: 'Hardware-Adaptive Video Profiles', test: () => this.testHardwareAdaptiveProfiles() },
+      { name: 'Local Footage-First Video Provider', test: () => this.testFootageFirstProvider() },
       { name: 'Scene Repair Studio', test: () => this.testSceneRepairStudio() },
       { name: 'Narration Reliability and Recovery', test: () => this.testNarrationReliability() },
       { name: 'Scene Rebuild with Real FFmpeg', test: () => this.testSceneRebuildRealFFmpeg() },
@@ -1036,6 +1037,75 @@ class SystemTest {
     this.logger.info('Production readiness gate test completed successfully');
   }
 
+  async testFootageFirstProvider() {
+    const fs = require('fs').promises;
+    const os = require('os');
+    const {
+      FootageFirstProvider, normalizeSearchQuery
+    } = require('./utils/footage-first-provider');
+    const { VideoProviderRegistry, getVideoProviderReadiness } = require('./utils/video-providers');
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'creatorflow-footage-'));
+    const library = path.join(directory, 'library');
+    const source = path.join(library, 'technology-ai-work.mp4');
+    const output = path.join(directory, 'rendered.mp4');
+    await fs.mkdir(library, { recursive: true });
+    await fs.writeFile(source, Buffer.alloc(2048, 1));
+
+    try {
+      if (!normalizeSearchQuery('AI technology for beginners').includes('ai')) {
+        throw new Error('Technical search terms such as AI must be retained');
+      }
+
+      const provider = new FootageFirstProvider({
+        directory: library,
+        hardwareProfile: { profile: 'integrated_plus' },
+        runFFmpeg: async args => {
+          if (!args.includes('ultrafast') || !args.includes('libx264')) {
+            throw new Error('Footage rendering must use the CPU-compatible FFmpeg profile');
+          }
+          await fs.writeFile(args[args.length - 1], Buffer.from('rendered footage'));
+        }
+      });
+      if (!provider.isAvailable()) throw new Error('A local footage library was not detected');
+
+      const task = await provider.createTask({
+        prompt: 'Technology AI working at a computer',
+        duration: 4,
+        outputPath: output
+      });
+      if (task.status !== 'succeeded' || task.source?.provider !== 'local_library' || task.duration !== 4) {
+        throw new Error('The footage provider did not select and describe a local video');
+      }
+
+      await provider.downloadResult(task, output);
+      if (!(await fs.stat(output)).size) throw new Error('FFmpeg did not produce the normalized MP4 output');
+
+      const registry = new VideoProviderRegistry({}, { providers: { footage_first: provider } });
+      if (registry.select('auto', ['footage_first'], { duration: 4 }).id !== 'footage_first') {
+        throw new Error('Auto routing did not select the free local footage provider');
+      }
+      const readiness = getVideoProviderReadiness(registry);
+      if (!readiness.ready || !readiness.footageReady || readiness.paidCloudAllowed) {
+        throw new Error('Local footage readiness must not require or enable paid cloud providers');
+      }
+
+      const empty = new FootageFirstProvider({
+        directory: path.join(directory, 'empty'),
+        hardwareProfile: { profile: 'integrated' }
+      });
+      let noMatch = false;
+      try {
+        await empty.createTask({ prompt: 'Unmatched topic', duration: 4, outputPath: output });
+      } catch (error) {
+        noMatch = error.code === 'FOOTAGE_NOT_FOUND' && /No matching local footage/.test(error.message);
+      }
+      if (!noMatch) throw new Error('Missing footage must fail clearly without a paid or slideshow fallback');
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true });
+    }
+    this.logger.info('Footage-first provider tests completed successfully');
+  }
+
   async testHardwareAdaptiveProfiles() {
     const {
       detectHardwareProfile, parseNvidiaSmi, parseWindowsAdapters, classifyHardware
@@ -1153,7 +1223,7 @@ class SystemTest {
       const providers = registry.list();
       const { getVideoProviderReadiness } = require('./utils/video-providers');
       const readiness = getVideoProviderReadiness(registry);
-      if (readiness.ready || readiness.localReady || readiness.paidCloudAllowed || readiness.configuredCount !== 1 || readiness.paidCloudConfiguredCount !== 1 || readiness.providerCount !== 6) {
+      if (readiness.ready || readiness.localReady || readiness.paidCloudAllowed || readiness.configuredCount !== 1 || readiness.paidCloudConfiguredCount !== 1 || readiness.providerCount !== 7) {
         throw new Error('Cloud credentials alone must not mark the free local video setup as ready');
       }
       if (!readiness.providers.find(provider => provider.id === 'seedance')?.credentialsConfigured) {
@@ -1166,7 +1236,7 @@ class SystemTest {
       if (!emptyReadiness.providers.find(provider => provider.id === 'kling')?.setupHint.includes('KLING_SECRET_KEY')) {
         throw new Error('Provider setup guidance is missing the required Kling secret key');
       }
-      for (const id of ['local_ltx', 'seedance', 'minimax_h3', 'google_omni', 'kling', 'wan', 'slideshow']) {
+      for (const id of ['footage_first', 'local_ltx', 'seedance', 'minimax_h3', 'google_omni', 'kling', 'wan', 'slideshow']) {
         if (!providers.find(provider => provider.id === id)) throw new Error(`Missing video provider: ${id}`);
       }
 
