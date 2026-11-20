@@ -23,7 +23,7 @@ function safeModelError(error) {
   return String(error?.response?.data?.message || error?.response?.data?.error?.message || error?.message || error || 'Video provider request failed')
     .replace(/Bearer\s+[A-Za-z0-9._~-]+/gi, 'Bearer [redacted]')
     .replace(/(api[_-]?key|token|secret)=([^\s&]+)/gi, '$1=[redacted]')
-    .replace(/([?&]key=)[^&\\s]+/gi, '$1=[redacted]')
+    .replace(/([?&]key=)[^&\s]+/gi, '$1=[redacted]')
     .slice(0, 500);
 }
 
