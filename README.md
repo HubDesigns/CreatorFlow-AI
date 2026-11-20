@@ -23,7 +23,7 @@ It researches topics, writes scripts, generates narration and visuals, assembles
 - **Real output only.** Simulated or placeholder media is clearly marked and can never be approved or uploaded.
 - **Self-hosted.** Your keys, media, and channel data stay on your machine.
 - **Learns from evidence, with your sign-off.** Lessons from analytics, retention curves, and comments shape future videos only after you approve them.
-- **Your choice of providers.** Eight text providers or OpenRouter, five optional cloud AI video providers, a free local LTX-Video Q8 option, and an explicit local slideshow mode. Automatic routing does not use paid cloud video APIs unless you opt in.
+- **Hardware-adaptive video.** The standard path uses real local or free stock footage, optional topic-matched photos, operating-system narration, local music, transitions, and FFmpeg. It works without an NVIDIA GPU or paid video API. Local LTX and cloud AI video providers are optional; paid providers require explicit opt-in.
 
 ## Quick start
 
@@ -79,7 +79,7 @@ Each item links to its walkthrough in the [feature guide](docs/features.md).
 **Produce**
 - [Production readiness](docs/features.md#production-readiness): a verified check of every provider, your channel, and video assembly before anything runs on its own. Paid image and video probes are separate opt-ins.
 - [Resumable generation](docs/features.md#resumable-generation): every stage is checkpointed, so a crash or timeout resumes where it stopped instead of starting over.
-- [AI video generation](docs/features.md#ai-video-generation): automatic AI-generated moving footage by default, hybrid assembly with real images, and an explicit local slideshow option.
+- [AI video generation](docs/features.md#ai-video-generation): hardware-adaptive footage-first MP4 rendering, optional local AI video models, hybrid assembly with real images, and an explicit local slideshow option.
 - [Shorts Repurposing Studio](docs/features.md#shorts-repurposing-studio): turn an approved video into three 9:16 Short drafts with burned-in captions, reusing existing media so no new generation credits are spent.
 
 **Review**
