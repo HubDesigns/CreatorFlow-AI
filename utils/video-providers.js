@@ -4,9 +4,10 @@ const path = require('path');
 const axios = require('axios');
 const fsSync = require('fs');
 const { spawn: nodeSpawn } = require('child_process');
+const { FootageFirstProvider } = require('./footage-first-provider');
 const Replicate = require('replicate');
 
-const DEFAULT_PROVIDER_ORDER = ['local_ltx', 'seedance', 'minimax_h3', 'google_omni', 'kling', 'wan', 'slideshow'];
+const DEFAULT_PROVIDER_ORDER = ['footage_first', 'local_ltx', 'seedance', 'minimax_h3', 'google_omni', 'kling', 'wan', 'slideshow'];
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value)));
 
@@ -566,6 +567,7 @@ class VideoProviderRegistry {
     const injected = options.providers || {};
     this.allowCloudProviders = options.allowCloudProviders ?? process.env.VIDEO_ALLOW_PAID_PROVIDERS === 'true';
     this.providers = new Map([
+      ['footage_first', injected.footage_first || new FootageFirstProvider(options.footage_first)],
       ['local_ltx', injected.local_ltx || new LocalLTXProvider(credentials, options.local_ltx)],
       ['seedance', injected.seedance || new SeedanceProvider(credentials, options.seedance)],
       ['minimax_h3', injected.minimax_h3 || new MiniMaxH3Provider(credentials, options.minimax_h3)],
@@ -581,8 +583,8 @@ class VideoProviderRegistry {
 
   select(requested = 'auto', order = DEFAULT_PROVIDER_ORDER, request = {}) {
     if (requested && requested !== 'auto') {
-      if (requested !== 'local_ltx' && requested !== 'slideshow' && !this.allowCloudProviders) {
-        const error = new Error('Paid cloud video providers are disabled. Select local_ltx, or explicitly enable VIDEO_ALLOW_PAID_PROVIDERS=true to use cloud generation.');
+      if (!['footage_first', 'local_ltx', 'slideshow'].includes(requested) && !this.allowCloudProviders) {
+        const error = new Error('Paid cloud video providers are disabled. Select footage_first or local_ltx, or explicitly enable VIDEO_ALLOW_PAID_PROVIDERS=true to use cloud generation.');
         error.code = 'PAID_VIDEO_PROVIDER_DISABLED';
         throw error;
       }
@@ -595,18 +597,19 @@ class VideoProviderRegistry {
 
     for (const id of order) {
       if (id === 'slideshow') continue;
-      if (id !== 'local_ltx' && !this.allowCloudProviders) continue;
+      if (!['footage_first', 'local_ltx'].includes(id) && !this.allowCloudProviders) continue;
       const provider = this.get(id);
       if (provider?.isAvailable() && provider.supports(request)) return provider;
     }
 
-    const error = new Error('No compatible free local AI video provider is installed. Install Local LTX-Video, or explicitly opt in to paid cloud video providers with VIDEO_ALLOW_PAID_PROVIDERS=true. Slideshow is available only when selected explicitly.');
+    const error = new Error('No compatible local footage or local AI video provider is available. Add licensed clips to data/footage, configure a free Pixabay API key, or install Local LTX-Video. Paid cloud providers remain disabled unless explicitly enabled.');
     error.code = 'VIDEO_PROVIDER_UNAVAILABLE';
     throw error;
   }
 }
 
 const PROVIDER_SETUP_HINTS = {
+  footage_first: 'Add licensed MP4/MOV clips to data/footage, or configure PIXABAY_API_KEY for free stock-footage search. Footage is rendered locally with FFmpeg; no paid video model is used.',
   local_ltx: 'Install the free LTX-Video Q8 runtime and model files locally; no API key or cloud subscription is required. See docs/local-ltx-video.md.',
   seedance: 'Add a Replicate API token (REPLICATE_API_TOKEN) or save it under Settings credentials → replicate.apiKey.',
   minimax_h3: 'Add a MiniMax API key (MINIMAX_API_KEY) or save it under Settings credentials → minimax.apiKey.',
@@ -621,23 +624,25 @@ function getVideoProviderReadiness(registry) {
     .map(provider => ({
       id: provider.id,
       model: provider.model || null,
-      credentialsConfigured: provider.id === 'local_ltx' ? false : provider.available === true,
-      installed: provider.id === 'local_ltx' ? provider.available === true : undefined,
+      credentialsConfigured: ['local_ltx', 'footage_first'].includes(provider.id) ? false : provider.available === true,
+      installed: ['local_ltx', 'footage_first'].includes(provider.id) ? provider.available === true : undefined,
       setupHint: PROVIDER_SETUP_HINTS[provider.id] || 'Configure this provider in Settings.'
     }));
   const configuredCount = providers.filter(provider => provider.credentialsConfigured || provider.installed).length;
   const localReady = providers.some(provider => provider.id === 'local_ltx' && provider.installed === true);
-  const paidCloudConfiguredCount = providers.filter(provider => provider.id !== 'local_ltx' && provider.credentialsConfigured).length;
+  const footageReady = providers.some(provider => provider.id === 'footage_first' && provider.installed === true);
+  const paidCloudConfiguredCount = providers.filter(provider => !['local_ltx', 'footage_first'].includes(provider.id) && provider.credentialsConfigured).length;
   const paidCloudAllowed = registry?.allowCloudProviders === true;
   return {
-    ready: localReady || (paidCloudAllowed && paidCloudConfiguredCount > 0),
+    ready: footageReady || localReady || (paidCloudAllowed && paidCloudConfiguredCount > 0),
     localReady,
+    footageReady,
     paidCloudAllowed,
     paidCloudConfiguredCount,
     configuredCount,
     providerCount: providers.length,
     providers,
-    note: 'Ready means the free local LTX installation paths are present, unless paid cloud providers were explicitly enabled. Local path checks do not validate Python, PyTorch, CUDA, Q8 kernels, GPU memory, or successful inference. Cloud credential presence does not verify billing, quota, or live API access.'
+    note: 'Footage readiness means local video files or a Pixabay API key are available; it does not verify that every topic has matching footage. Local LTX readiness checks model paths only and does not validate CUDA or successful inference. Cloud credentials do not verify billing, quota, or live API access.'
   };
 }
 
