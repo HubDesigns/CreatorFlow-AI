@@ -39,7 +39,7 @@ function parseWindowsAdapters(output = '') {
 }
 
 function classifyHardware({ totalMemoryMb, gpus }) {
-  const discrete = gpus.filter(gpu => gpu.vendor !== 'Intel');
+  const discrete = gpus.filter(gpu => !['Intel', 'Apple'].includes(gpu.vendor));
   const nvidia = discrete.find(gpu => gpu.vendor === 'NVIDIA' && gpu.dedicatedMemoryMb);
   const bestDiscrete = discrete
     .filter(gpu => Number(gpu.dedicatedMemoryMb) > 0)
