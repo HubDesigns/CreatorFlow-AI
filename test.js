@@ -34,6 +34,7 @@ class SystemTest {
       { name: 'Durable Multi-Provider Video Generation', test: () => this.testVideoProviderLayer() },
       { name: 'Hardware-Adaptive Video Profiles', test: () => this.testHardwareAdaptiveProfiles() },
       { name: 'Local Footage-First Video Provider', test: () => this.testFootageFirstProvider() },
+      { name: 'Offline Operating-System Narration', test: () => this.testOfflineOSNarration() },
       { name: 'Scene Repair Studio', test: () => this.testSceneRepairStudio() },
       { name: 'Narration Reliability and Recovery', test: () => this.testNarrationReliability() },
       { name: 'Scene Rebuild with Real FFmpeg', test: () => this.testSceneRebuildRealFFmpeg() },
@@ -1035,6 +1036,51 @@ class SystemTest {
       await fs.rm(directory, { recursive: true, force: true });
     }
     this.logger.info('Production readiness gate test completed successfully');
+  }
+
+  async testOfflineOSNarration() {
+    const fs = require('fs').promises;
+    const fsSync = require('fs');
+    const os = require('os');
+    const { EventEmitter } = require('events');
+    const { AIVideoGenerator } = require('./utils/ai-video-generator');
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'creatorflow-local-tts-'));
+    const output = path.join(directory, 'narration.mp3');
+
+    try {
+      const generator = new AIVideoGenerator({}, {
+        platform: 'win32',
+        spawn: (_command, args) => {
+          const child = new EventEmitter();
+          child.stdout = new EventEmitter();
+          child.stderr = new EventEmitter();
+          child.kill = () => {};
+          const outputIndex = args.indexOf('-OutputPath');
+          const wavPath = args[outputIndex + 1];
+          setImmediate(() => {
+            fsSync.writeFileSync(wavPath, Buffer.alloc(2048, 1));
+            child.emit('close', 0);
+          });
+          return child;
+        },
+        runFFmpeg: async args => {
+          await fs.writeFile(args[args.length - 1], Buffer.alloc(2048, 2));
+        }
+      });
+      const generated = await generator.generateTTSAudio('Offline narration test', output);
+      if (generated !== output || !(await fs.stat(output)).size) {
+        throw new Error('The local operating-system TTS path did not create an audio file');
+      }
+      if (generator.lastNarrationResult?.provider !== 'local_os' || generator.lastNarrationResult.simulated) {
+        throw new Error('Local OS narration must be reported as real, non-simulated audio');
+      }
+      if (generator.lastNarrationResult?.cost?.invoiceRequired !== false) {
+        throw new Error('Local operating-system narration must not report a paid invoice requirement');
+      }
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true });
+    }
+    this.logger.info('Offline operating-system narration tests completed successfully');
   }
 
   async testFootageFirstProvider() {
