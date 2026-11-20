@@ -657,6 +657,7 @@ module.exports = {
   KlingProvider,
   WanProvider,
   LocalLTXProvider,
+  FootageFirstProvider,
   SlideshowProvider,
   safeModelError,
   getVideoProviderReadiness
