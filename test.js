@@ -1136,7 +1136,7 @@ class SystemTest {
 
     const high = classifyHardware({
       totalMemoryMb: 32768,
-      gpus: [{ name: 'NVIDIA RTX test', vendor: 'NVIDIA', dedicatedMemoryMb: 8192 }]
+      gpus: [{ name: 'NVIDIA RTX test', vendor: 'NVIDIA', dedicatedMemoryMb: 8188 }]
     });
     if (high.profile !== 'high_gpu' || !high.localLtxCandidate) {
       throw new Error('The high-GPU profile candidate was not detected');
