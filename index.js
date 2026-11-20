@@ -205,7 +205,7 @@ class YouTubeAutomationAgent {
       { name: 'Script & strategy generation', ok: hasText, hint: 'configure an AI provider (npm run credentials:setup)' },
       { name: 'Image generation (visuals/thumbnails)', ok: hasImages, hint: 'requires an OpenAI or Gemini API key — otherwise gradient slides are used' },
       { name: 'Voice narration (TTS)', ok: hasTTS, hint: 'configure OpenAI, Gemini, ElevenLabs, or Azure Speech — otherwise videos are silent' },
-      { name: 'AI moving-video generation', ok: hasVideoProvider, hint: hasVideoProvider ? '' : 'Configure at least one provider: Seedance (Replicate), MiniMax, Gemini video, Kling, or Wan (DashScope). See /api/video-providers for exact setup guidance.' },
+      { name: 'Video footage & generation', ok: hasVideoProvider, hint: hasVideoProvider ? '' : 'Add licensed video clips to data/footage, configure a free Pixabay API key, or install optional local LTX. Paid cloud providers remain disabled by default. See /api/video-providers.' },
       { name: 'Video assembly (FFmpeg)', ok: hasFFmpeg, hint: ffmpegInstallHint() },
       { name: 'YouTube upload', ok: hasUpload, hint: 'run: npm run credentials:setup' }
     ];
