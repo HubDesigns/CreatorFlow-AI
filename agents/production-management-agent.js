@@ -27,6 +27,7 @@ class ProductionManagementAgent {
       'data/production',
       'data/assets',
       'data/footage',
+      'data/images',
       'data/music',
       'data/videos',
       'data/audio',
@@ -307,6 +308,45 @@ class ProductionManagementAgent {
     return Math.min(100, priority);
   }
 
+  async findLocalImageAssets(script = {}) {
+    const root = path.join(__dirname, '..', 'data', 'images');
+    const extensions = new Set(['.png', '.jpg', '.jpeg', '.webp']);
+    const stopWords = new Set(['about', 'after', 'also', 'and', 'are', 'for', 'from', 'into', 'that', 'the', 'this', 'with', 'your', 'how', 'what']);
+    const text = [
+      script.title,
+      script.hook?.text,
+      ...(script.mainContent?.sections || []).map(section => [
+        section.title,
+        typeof section.content === 'string' ? section.content : '',
+        ...(section.items || []).map(item => item.title || ''),
+        ...(section.steps || []).map(step => step.title || '')
+      ].flat().join(' ')),
+      script.conclusion?.finalThought
+    ].filter(Boolean).join(' ').toLowerCase();
+    const words = [...new Set(text.split(/[^a-z0-9]+/).filter(word => word.length > 1 && !stopWords.has(word)))];
+    const files = [];
+
+    const walk = async (directory, depth = 0) => {
+      if (depth > 3) return;
+      const entries = await fs.readdir(directory, { withFileTypes: true }).catch(() => []);
+      for (const entry of entries) {
+        const fullPath = path.join(directory, entry.name);
+        if (entry.isDirectory()) await walk(fullPath, depth + 1);
+        else if (entry.isFile() && extensions.has(path.extname(entry.name).toLowerCase())) files.push(fullPath);
+      }
+    };
+    await walk(root);
+
+    return files.map(file => {
+      const name = path.basename(file, path.extname(file)).toLowerCase().split(/[^a-z0-9]+/);
+      const score = words.reduce((total, word) => total + (name.includes(word) ? 1 : 0), 0);
+      return { file, score };
+    }).filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score || a.file.localeCompare(b.file))
+      .slice(0, 8)
+      .map(item => item.file);
+  }
+
   async generateVideoContent(productionData) {
     this.logger.info('Preparing visual assets for video production...');
 
@@ -333,6 +373,9 @@ class ProductionManagementAgent {
       const visualAssets = [];
       if (selectedProvider && ['footage_first', 'local_ltx'].includes(selectedProvider.id)) {
         const sourceMode = selectedProvider.id;
+        if (sourceMode === 'footage_first') {
+          visualAssets.push(...await this.findLocalImageAssets(script));
+        }
         this.logger.info(
           sourceMode === 'footage_first'
             ? 'Using footage-first mode: no AI image API is required.'
