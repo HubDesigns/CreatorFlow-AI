@@ -67,12 +67,19 @@ class FootageFirstProvider {
 
   isAvailable() {
     if (this.apiKey) return true;
-    try {
-      return fsSync.existsSync(this.directory) &&
-        fsSync.readdirSync(this.directory).some(name => VIDEO_EXTENSIONS.has(path.extname(name).toLowerCase()));
-    } catch (_error) {
-      return false;
-    }
+    const hasVideo = directory => {
+      try {
+        return fsSync.readdirSync(directory, { withFileTypes: true }).some(entry => {
+          const fullPath = path.join(directory, entry.name);
+          return entry.isFile()
+            ? VIDEO_EXTENSIONS.has(path.extname(entry.name).toLowerCase())
+            : entry.isDirectory() && hasVideo(fullPath);
+        });
+      } catch (_error) {
+        return false;
+      }
+    };
+    return hasVideo(this.directory);
   }
 
   supports(request = {}) {
@@ -178,6 +185,7 @@ class FootageFirstProvider {
         externalTaskId: 'local_' + crypto.createHash('sha1').update(local.file).digest('hex').slice(0, 12),
         status: 'succeeded',
         outputUrl: local.file,
+        duration: request.duration,
         model: this.model,
         source: {
           provider: 'local_library',
@@ -213,6 +221,7 @@ class FootageFirstProvider {
       externalTaskId: 'pixabay_' + selected.hit.id,
       status: 'succeeded',
       outputUrl: tempPath,
+      duration: request.duration,
       model: this.model,
       tempPath,
       source: {
