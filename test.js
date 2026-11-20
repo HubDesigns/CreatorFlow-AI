@@ -1146,6 +1146,7 @@ class SystemTest {
     const {
       FootageFirstProvider, normalizeSearchQuery
     } = require('./utils/footage-first-provider');
+    const { normalizeImageQuery, searchPixabayImages } = require('./utils/pixabay-image-library');
     const { VideoProviderRegistry, getVideoProviderReadiness } = require('./utils/video-providers');
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'creatorflow-footage-'));
     const library = path.join(directory, 'library');
@@ -1157,6 +1158,17 @@ class SystemTest {
     try {
       if (!normalizeSearchQuery('AI technology for beginners').includes('ai')) {
         throw new Error('Technical search terms such as AI must be retained');
+      }
+
+      if (!normalizeImageQuery('AI technology for beginners').includes('ai')) {
+        throw new Error('Pixabay photo search must retain short technical terms');
+      }
+      const noKeyImages = await searchPixabayImages('technology AI', {
+        apiKey: '',
+        http: { get: async () => { throw new Error('A network call should not be made without a key'); } }
+      });
+      if (noKeyImages.images.length || noKeyImages.sources.length) {
+        throw new Error('Optional stock photo search must remain inactive without an API key');
       }
 
       const provider = new FootageFirstProvider({
