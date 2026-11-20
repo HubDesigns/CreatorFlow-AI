@@ -1100,6 +1100,8 @@ class SystemTest {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'creatorflow-local-tts-'));
     const output = path.join(directory, 'narration.mp3');
 
+    const previousTtsProvider = process.env.TTS_PROVIDER;
+    process.env.TTS_PROVIDER = 'local_os';
     try {
       const generator = new AIVideoGenerator({}, {
         platform: 'win32',
@@ -1131,6 +1133,8 @@ class SystemTest {
         throw new Error('Local operating-system narration must not report a paid invoice requirement');
       }
     } finally {
+      if (previousTtsProvider === undefined) delete process.env.TTS_PROVIDER;
+      else process.env.TTS_PROVIDER = previousTtsProvider;
       await fs.rm(directory, { recursive: true, force: true });
     }
     this.logger.info('Offline operating-system narration tests completed successfully');
