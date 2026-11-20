@@ -369,8 +369,30 @@ class ProductionManagementAgent {
       const visualAssets = [];
       if (selectedProvider && ['footage_first', 'local_ltx'].includes(selectedProvider.id)) {
         const sourceMode = selectedProvider.id;
+        const imageCredits = [];
         if (sourceMode === 'footage_first') {
-          visualAssets.push(...await this.findLocalImageAssets(script));
+          const localImages = (await this.findLocalImageAssets(script)).slice(0, 4);
+          visualAssets.push(...localImages);
+          imageCredits.push(...localImages.map(file => ({
+            provider: 'local_library',
+            file: path.basename(file),
+            attribution: 'User-provided local image'
+          })));
+
+          if (visualAssets.length < 4 && process.env.PIXABAY_API_KEY) {
+            try {
+              const { searchPixabayImages } = require('../utils/pixabay-image-library');
+              const imageQuery = [
+                script.title,
+                ...(script.mainContent?.sections || []).slice(0, 3).map(section => section.title)
+              ].filter(Boolean).join(' ');
+              const stockImages = await searchPixabayImages(imageQuery, { limit: 4 - visualAssets.length });
+              visualAssets.push(...stockImages.images);
+              imageCredits.push(...stockImages.sources);
+            } catch (imageError) {
+              this.logger.warn(`Optional Pixabay photo search was skipped: ${imageError.message}`);
+            }
+          }
         }
         this.logger.info(
           sourceMode === 'footage_first'
@@ -379,11 +401,7 @@ class ProductionManagementAgent {
         );
         productionData.assets.video = {
           visualAssets,
-          sourceCredits: visualAssets.map(file => ({
-            provider: 'local_library',
-            file: path.basename(file),
-            attribution: 'User-provided local image'
-          })),
+          sourceCredits: imageCredits,
           duration: productionData.estimatedDuration,
           format: 'mp4',
           resolution: 'adaptive',
