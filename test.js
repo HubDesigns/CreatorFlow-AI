@@ -32,6 +32,7 @@ class SystemTest {
       { name: 'Scene-Aware Retention Studio', test: () => this.testSceneAwareRetentionStudio() },
       { name: 'Production Readiness Gate', test: () => this.testProductionReadinessGate() },
       { name: 'Durable Multi-Provider Video Generation', test: () => this.testVideoProviderLayer() },
+      { name: 'Hardware-Adaptive Video Profiles', test: () => this.testHardwareAdaptiveProfiles() },
       { name: 'Scene Repair Studio', test: () => this.testSceneRepairStudio() },
       { name: 'Narration Reliability and Recovery', test: () => this.testNarrationReliability() },
       { name: 'Scene Rebuild with Real FFmpeg', test: () => this.testSceneRebuildRealFFmpeg() },
@@ -1033,6 +1034,58 @@ class SystemTest {
       await fs.rm(directory, { recursive: true, force: true });
     }
     this.logger.info('Production readiness gate test completed successfully');
+  }
+
+  async testHardwareAdaptiveProfiles() {
+    const {
+      detectHardwareProfile, parseNvidiaSmi, parseWindowsAdapters, classifyHardware
+    } = require('./utils/hardware-profile');
+
+    const nvidia = parseNvidiaSmi('NVIDIA GeForce RTX 4060 Laptop GPU, 8188');
+    if (nvidia.length !== 1 || nvidia[0].vendor !== 'NVIDIA' || nvidia[0].dedicatedMemoryMb !== 8188) {
+      throw new Error('NVIDIA hardware output was not parsed correctly');
+    }
+
+    const intel = parseWindowsAdapters('Intel(R) UHD Graphics|1073741824');
+    if (intel.length !== 1 || intel[0].vendor !== 'Intel') {
+      throw new Error('Windows integrated graphics were not identified');
+    }
+
+    const integrated = classifyHardware({ totalMemoryMb: 32768, gpus: intel });
+    if (integrated.profile !== 'integrated_plus' || integrated.localLtxCandidate || integrated.defaultVideoMode !== 'footage_first') {
+      throw new Error('A 32 GB integrated-graphics PC must use the safe footage-first profile');
+    }
+
+    const entry = classifyHardware({
+      totalMemoryMb: 16384,
+      gpus: [{ name: 'AMD Radeon', vendor: 'AMD', dedicatedMemoryMb: 4096 }]
+    });
+    if (entry.profile !== 'entry_gpu' || entry.localLtxCandidate) {
+      throw new Error('A lower-tier dedicated GPU must not be treated as an LTX-ready device');
+    }
+
+    const high = classifyHardware({
+      totalMemoryMb: 32768,
+      gpus: [{ name: 'NVIDIA RTX test', vendor: 'NVIDIA', dedicatedMemoryMb: 8192 }]
+    });
+    if (high.profile !== 'high_gpu' || !high.localLtxCandidate) {
+      throw new Error('The high-GPU profile candidate was not detected');
+    }
+
+    const detected = await detectHardwareProfile({
+      platform: 'win32',
+      arch: 'x64',
+      totalmem: () => 32 * 1024 * 1024 * 1024,
+      cpus: [{ model: 'Test CPU' }, { model: 'Test CPU' }],
+      execFile: (command, _args, _options, callback) => {
+        if (command === 'nvidia-smi') return callback(new Error('not installed'), '');
+        return callback(null, 'Intel(R) UHD Graphics|1073741824');
+      }
+    });
+    if (detected.profile !== 'integrated_plus' || detected.cpu.logicalCores !== 2 || detected.gpus[0]?.vendor !== 'Intel') {
+      throw new Error('Hardware detection did not fall back to Windows graphics inventory');
+    }
+    this.logger.info('Hardware-adaptive profile detection tests completed successfully');
   }
 
   async testVideoProviderLayer() {
