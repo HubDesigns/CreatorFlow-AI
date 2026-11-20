@@ -1212,7 +1212,7 @@ class SystemTest {
 
   async testHardwareAdaptiveProfiles() {
     const {
-      detectHardwareProfile, parseNvidiaSmi, parseWindowsAdapters, classifyHardware
+      detectHardwareProfile, parseNvidiaSmi, parseWindowsAdapters, parseLinuxLspci, parseMacDisplays, classifyHardware
     } = require('./utils/hardware-profile');
 
     const nvidia = parseNvidiaSmi('NVIDIA GeForce RTX 4060 Laptop GPU, 8188');
@@ -1223,6 +1223,19 @@ class SystemTest {
     const intel = parseWindowsAdapters('Intel(R) UHD Graphics|1073741824');
     if (intel.length !== 1 || intel[0].vendor !== 'Intel') {
       throw new Error('Windows integrated graphics were not identified');
+    }
+
+    const linuxGpu = parseLinuxLspci('01:00.0 VGA compatible controller: AMD Radeon RX 6700 XT');
+    if (linuxGpu.length !== 1 || linuxGpu[0].vendor !== 'AMD') {
+      throw new Error('Linux graphics inventory was not identified');
+    }
+
+    const macGpu = parseMacDisplays(JSON.stringify({
+      SPDisplaysDataType: [{ sppci_model: 'Apple M3 GPU', spdisplays_vram: '16 GB' }]
+    }));
+    const appleProfile = classifyHardware({ totalMemoryMb: 32768, gpus: macGpu });
+    if (macGpu[0]?.vendor !== 'Apple' || appleProfile.profile !== 'integrated_plus') {
+      throw new Error('Apple unified memory must not be mistaken for dedicated NVIDIA-class VRAM');
     }
 
     const integrated = classifyHardware({ totalMemoryMb: 32768, gpus: intel });
