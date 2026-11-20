@@ -68,13 +68,14 @@ class FootageFirstProvider {
 
   isAvailable() {
     if (this.apiKey) return true;
-    const hasVideo = directory => {
+    const hasVideo = (directory, depth = 0) => {
+      if (depth > 3) return false;
       try {
         return fsSync.readdirSync(directory, { withFileTypes: true }).some(entry => {
           const fullPath = path.join(directory, entry.name);
           return entry.isFile()
             ? VIDEO_EXTENSIONS.has(path.extname(entry.name).toLowerCase())
-            : entry.isDirectory() && hasVideo(fullPath);
+            : entry.isDirectory() && hasVideo(fullPath, depth + 1);
         });
       } catch (_error) {
         return false;
