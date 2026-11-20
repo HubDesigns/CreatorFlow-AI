@@ -199,6 +199,7 @@ class FootageFirstProvider {
         status: 'succeeded',
         outputUrl: local.file,
         duration: request.duration,
+        resolution: request.resolution,
         model: this.model,
         source: {
           provider: 'local_library',
@@ -235,6 +236,7 @@ class FootageFirstProvider {
       status: 'succeeded',
       outputUrl: tempPath,
       duration: request.duration,
+      resolution: request.resolution,
       model: this.model,
       tempPath,
       source: {
@@ -259,7 +261,10 @@ class FootageFirstProvider {
   async downloadResult(task, outputPath) {
     if (!task.outputUrl || !fsSync.existsSync(task.outputUrl)) throw new Error('Selected footage file is missing');
     const profile = await this.getProfile();
-    const width = profile.profile === 'high_gpu' ? 1920 : profile.profile === 'integrated' ? 960 : 1280;
+    const maxWidth = profile.profile === 'high_gpu' ? 1920 : profile.profile === 'integrated' ? 960 : 1280;
+    const resolutionWidths = { '360p': 640, '480p': 854, '540p': 960, '720p': 1280, '1080p': 1920 };
+    const requestedWidth = resolutionWidths[String(task.resolution || '').toLowerCase()] || maxWidth;
+    const width = Math.min(maxWidth, requestedWidth);
     const height = Math.round(width * 9 / 16);
     const duration = Math.max(1, Math.min(120, Number(task.duration || process.env.VIDEO_CLIP_DURATION || 8)));
     await fs.mkdir(path.dirname(outputPath), { recursive: true });
