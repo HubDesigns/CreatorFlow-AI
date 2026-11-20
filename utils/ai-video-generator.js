@@ -75,6 +75,7 @@ class AIVideoGenerator {
     this.platform = options.platform || process.platform;
     this.hardwareProfile = options.hardwareProfile || null;
     this.renderProfile = null;
+    this.requestedResolution = null;
     this.lastMusicPath = null;
     this.musicDirectory = path.resolve(options.musicDirectory || path.join(process.cwd(), 'data', 'music'));
     
@@ -532,6 +533,8 @@ class AIVideoGenerator {
         visualAssets,
         outputDir: path.dirname(outputPath)
       });
+      this.requestedResolution = generated.settings?.resolution || null;
+      this.renderProfile = null;
 
       // Slideshow is supported only when the operator explicitly selected it.
       if (generated.actualProvider === 'slideshow') {
@@ -640,11 +643,12 @@ class AIVideoGenerator {
       this.hardwareProfile = hardware;
     }
     const profile = hardware?.profile || 'integrated';
-    const defaultWidth = profile === 'high_gpu' ? 1920 : profile === 'integrated' ? 960 : 1280;
-    const requestedWidth = Number(process.env.VIDEO_OUTPUT_WIDTH || defaultWidth);
-    const width = Number.isFinite(requestedWidth) && requestedWidth > 0
-      ? Math.max(640, Math.min(3840, requestedWidth))
-      : defaultWidth;
+    const maxWidth = profile === 'high_gpu' ? 1920 : profile === 'integrated' ? 960 : 1280;
+    const resolutionWidths = { '360p': 640, '480p': 854, '540p': 960, '720p': 1280, '1080p': 1920 };
+    const defaultWidth = resolutionWidths[String(this.requestedResolution || '').toLowerCase()] || maxWidth;
+    const envWidth = Number(process.env.VIDEO_OUTPUT_WIDTH || defaultWidth);
+    const requestedWidth = Number.isFinite(envWidth) && envWidth > 0 ? envWidth : defaultWidth;
+    const width = Math.max(640, Math.min(maxWidth, requestedWidth));
     const requestedHeight = Number(process.env.VIDEO_OUTPUT_HEIGHT || Math.round(width * 9 / 16));
     const height = Number.isFinite(requestedHeight) && requestedHeight > 0
       ? Math.max(360, Math.min(2160, requestedHeight))
