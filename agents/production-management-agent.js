@@ -383,6 +383,11 @@ class ProductionManagementAgent {
         );
         productionData.assets.video = {
           visualAssets,
+          sourceCredits: visualAssets.map(file => ({
+            provider: 'local_library',
+            file: path.basename(file),
+            attribution: 'User-provided local image'
+          })),
           duration: productionData.estimatedDuration,
           format: 'mp4',
           resolution: 'adaptive',
@@ -692,6 +697,10 @@ class ProductionManagementAgent {
       const videoResult = this.aiVideoGenerator.lastVideoResult || { actualProvider: 'unknown', model: null };
       const footageFirst = videoResult.actualProvider === 'footage_first';
       productionData.assets.audio.backgroundMusicPath = this.aiVideoGenerator.lastMusicPath || null;
+      const sourceCredits = [
+        ...(productionData.assets.video?.sourceCredits || []),
+        ...(videoResult.sources || [])
+      ];
       productionData.assets.finalVideo = {
         path: finalVideoPath,
         fileSize: stats.size,
@@ -700,9 +709,9 @@ class ProductionManagementAgent {
         resolution: footageFirst ? 'hardware-adaptive' : '1920x1080',
         format: 'mp4',
         provider: videoResult,
-        sourceCredits: videoResult.sources || []
+        sourceCredits
       };
-      productionData.assets.video.sourceCredits = videoResult.sources || [];
+      productionData.assets.video.sourceCredits = sourceCredits;
       productionData.containsSyntheticMedia = Boolean(
         videoResult.actualProvider &&
         !['footage_first', 'slideshow', 'simulation'].includes(videoResult.actualProvider)
