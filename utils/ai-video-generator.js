@@ -641,8 +641,14 @@ class AIVideoGenerator {
     }
     const profile = hardware?.profile || 'integrated';
     const defaultWidth = profile === 'high_gpu' ? 1920 : profile === 'integrated' ? 960 : 1280;
-    const width = Math.max(640, Math.min(3840, Number(process.env.VIDEO_OUTPUT_WIDTH || defaultWidth)));
-    const height = Math.max(360, Math.min(2160, Number(process.env.VIDEO_OUTPUT_HEIGHT || Math.round(width * 9 / 16))));
+    const requestedWidth = Number(process.env.VIDEO_OUTPUT_WIDTH || defaultWidth);
+    const width = Number.isFinite(requestedWidth) && requestedWidth > 0
+      ? Math.max(640, Math.min(3840, requestedWidth))
+      : defaultWidth;
+    const requestedHeight = Number(process.env.VIDEO_OUTPUT_HEIGHT || Math.round(width * 9 / 16));
+    const height = Number.isFinite(requestedHeight) && requestedHeight > 0
+      ? Math.max(360, Math.min(2160, requestedHeight))
+      : Math.round(width * 9 / 16);
     this.renderProfile = { width, height, fps: 24, hardwareProfile: profile };
     return this.renderProfile;
   }
