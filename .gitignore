@@ -82,6 +82,9 @@ backup/
 .cache/
 *.cache
 # Generated content outputs
+data/footage/
+data/images/
+data/music/
 data/assets/
 data/audio/
 data/captions/
