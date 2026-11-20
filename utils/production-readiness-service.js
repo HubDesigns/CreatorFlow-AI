@@ -148,7 +148,7 @@ class ProductionReadinessService {
     if (this.probes.image) return this.probes.image({ tempDir, includePaidMedia });
     const generator = new AIVideoGenerator(this.credentialManager.credentials || {});
     if (!generator.openai && !generator.gemini) {
-      return { status: 'warning', message: 'No AI image provider is configured; gradient visuals will be used.', remediation: 'Configure OpenAI or Gemini image access if generated visuals are required.' };
+      return { status: 'warning', message: 'No cloud AI image provider is configured; footage-first videos can still use local photos from data/images.', remediation: 'Configure OpenAI or Gemini image access if generated visuals are required.' };
     }
     if (!includePaidMedia) {
       return { status: 'skipped', message: 'Provider is configured; the paid live image probe was not requested.', remediation: 'Enable “Include paid image probe” on the next readiness run to verify image generation.' };
@@ -181,7 +181,9 @@ class ProductionReadinessService {
       if (requested === 'slideshow') {
         return { message: 'Local slideshow video generation is selected; no paid AI video provider is required.', details: { provider: 'slideshow' } };
       }
-      throw new Error(`${requested} is selected but its credentials are not configured`);
+      throw new Error(requested === 'footage_first'
+        ? 'Footage-first is selected but no local videos or Pixabay API key were found. Add licensed clips to data/footage or configure PIXABAY_API_KEY.'
+        : `${requested} is selected but its credentials are not configured`);
     }
     if (configured.id === 'slideshow') {
       return { message: 'Local slideshow video generation is selected; no paid AI video provider is required.', details: { provider: 'slideshow' } };
